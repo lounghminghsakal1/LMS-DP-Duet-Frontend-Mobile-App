@@ -16,7 +16,9 @@ import '../../pairing/presentation/pairing_view.dart';
 import '../../player/presentation/watch_flow.dart';
 import '../../session/data/session_socket.dart';
 import '../../session/domain/room_state.dart';
+import '../../session/presentation/presence.dart';
 import '../../session/presentation/session_controller.dart';
+import '../../sharing/presentation/share_controller.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -92,6 +94,7 @@ class _PairedHome extends ConsumerWidget {
     final partner = overview.partner!;
     final partnerOnline = session.partner?.online ?? partner.online ?? false;
     final media = session.media;
+    final upload = ref.watch(shareControllerProvider);
 
     return RefreshIndicator(
       onRefresh: () => ref.read(overviewControllerProvider.notifier).refresh(),
@@ -103,11 +106,18 @@ class _PairedHome extends ConsumerWidget {
             partnerEmoji: session.partner?.avatarEmoji ?? partner.avatarEmoji,
             partnerName: session.partner?.displayName ?? partner.displayName,
             partnerOnline: partnerOnline,
+            presence: presenceText(session.partner, fallbackLastSeen: partner.lastSeenAt),
             myName: overview.user.displayName,
           ),
           if (session.connection != ConnectionStatus.connected) ...[
             const SizedBox(height: 12),
             _ConnectionBanner(connecting: session.connection == ConnectionStatus.connecting),
+          ] else if (!partnerOnline) ...[
+            const SizedBox(height: 12),
+            _PartnerOfflineBanner(
+              name: session.partner?.displayName ?? partner.displayName,
+              presence: presenceText(session.partner, fallbackLastSeen: partner.lastSeenAt),
+            ),
           ],
           if (media != null) ...[
             const SizedBox(height: 16),
@@ -116,6 +126,14 @@ class _PairedHome extends ConsumerWidget {
               startedByMe: media.loadedBy == session.myUserId,
               partnerName: session.partner?.displayName ?? partner.displayName,
               onJoin: () => context.push('/join'),
+            ),
+          ],
+          if (upload.isBusy) ...[
+            const SizedBox(height: 12),
+            _ShareUploadCard(
+              state: upload,
+              partnerName: session.partner?.displayName ?? partner.displayName,
+              onCancel: () => ref.read(shareControllerProvider.notifier).cancel(),
             ),
           ],
           const SizedBox(height: 24),
@@ -189,6 +207,7 @@ class _CoupleHeader extends StatelessWidget {
     required this.partnerEmoji,
     required this.partnerName,
     required this.partnerOnline,
+    required this.presence,
     required this.myName,
   });
 
@@ -196,6 +215,7 @@ class _CoupleHeader extends StatelessWidget {
   final String partnerEmoji;
   final String partnerName;
   final bool partnerOnline;
+  final String presence;
   final String myName;
 
   @override
@@ -229,7 +249,7 @@ class _CoupleHeader extends StatelessWidget {
                 Text('$myName & $partnerName', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 4),
                 Text(
-                  partnerOnline ? '$partnerName is online now 💚' : '$partnerName is offline',
+                  partnerOnline ? '$partnerName is online now 💚' : '$partnerName · $presence',
                   style: TextStyle(color: partnerOnline ? DuetColors.mint : DuetColors.textMuted, fontSize: 13),
                 ),
               ],
@@ -271,6 +291,97 @@ class _ConnectionBanner extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ShareUploadCard extends StatelessWidget {
+  const _ShareUploadCard({required this.state, required this.partnerName, required this.onCancel});
+
+  final ShareUploadState state;
+  final String partnerName;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final preparing = state.status == ShareUploadStatus.preparing;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.cloud_upload_rounded, color: DuetColors.violet, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    preparing ? 'Getting “${state.title}” ready to share…' : 'Sharing “${state.title}” with $partnerName',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                TextButton(onPressed: onCancel, child: const Text('Cancel')),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(value: preparing ? null : state.progress, minHeight: 5),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              preparing
+                  ? 'Finding the file…'
+                  : '${(state.progress * 100).floor()}% · ${formatBytes(state.uploadedBytes)} of ${formatBytes(state.sizeBytes)} · keep Duet open',
+              style: const TextStyle(color: DuetColors.textMuted, fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PartnerOfflineBanner extends StatelessWidget {
+  const _PartnerOfflineBanner({required this.name, required this.presence});
+
+  final String name;
+  final String presence;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: DuetColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: DuetColors.outline),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off_rounded, color: DuetColors.textFaint, size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$name is offline', style: const TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text(
+                  '${presence[0].toUpperCase()}${presence.substring(1)} · they\'ll see what you start when they open Duet',
+                  style: const TextStyle(color: DuetColors.textMuted, fontSize: 12.5),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

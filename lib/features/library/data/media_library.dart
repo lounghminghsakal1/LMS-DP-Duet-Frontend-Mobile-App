@@ -18,6 +18,23 @@ class MediaLibrary {
 
   final HistoryStore _history;
 
+  /// Files picked with the system picker this session (content:// uris can only be
+  /// read through the picked handle, e.g. to share them with the partner).
+  final _picked = <String, PlatformFile>{};
+
+  /// Reads the file's bytes, from a path or a content:// uri picked earlier.
+  Stream<List<int>> openRead(LocalMedia media) {
+    if (!media.isContentUri) return File(media.source).openRead();
+    final picked = _picked[media.source];
+    if (picked == null) {
+      throw const FileSystemException('Pick the file again so Duet can read it.');
+    }
+    return picked.readAsByteStream();
+  }
+
+  /// True if [openRead] will work for this file right now.
+  bool canRead(LocalMedia media) => !media.isContentUri || _picked.containsKey(media.source);
+
   RequestType _type(MediaKind kind) => kind == MediaKind.audio ? RequestType.audio : RequestType.video;
 
   FilterOptionGroup _filter({int? durationMs}) {
@@ -70,6 +87,7 @@ class MediaLibrary {
       sizeBytes: fp.sizeBytes,
       fingerprint: fp.fingerprint,
       durationMs: asset.duration > 0 ? asset.duration * 1000 : null,
+      fileName: p.basename(file.path),
     );
   }
 
@@ -88,16 +106,20 @@ class MediaLibrary {
         title: _cleanTitle(picked.name),
         sizeBytes: fp.sizeBytes,
         fingerprint: fp.fingerprint,
+        fileName: picked.name,
       );
     }
     final size = picked.lengthSync() ?? await picked.length() ?? 0;
     final fingerprint = await fingerprintStream(picked.readAsByteStream(), size);
+    final source = picked.uri.toString();
+    _picked[source] = picked;
     return LocalMedia(
       kind: kind,
-      source: picked.uri.toString(),
+      source: source,
       title: _cleanTitle(picked.name),
       sizeBytes: size,
       fingerprint: fingerprint,
+      fileName: picked.name,
     );
   }
 
@@ -109,7 +131,14 @@ class MediaLibrary {
     if (!await file.exists()) return null;
     try {
       final fp = await fingerprintFile(source);
-      return LocalMedia(kind: kind, source: source, title: title, sizeBytes: fp.sizeBytes, fingerprint: fp.fingerprint);
+      return LocalMedia(
+        kind: kind,
+        source: source,
+        title: title,
+        sizeBytes: fp.sizeBytes,
+        fingerprint: fp.fingerprint,
+        fileName: p.basename(source),
+      );
     } catch (_) {
       return null;
     }
@@ -161,6 +190,7 @@ class MediaLibrary {
               sizeBytes: fp.sizeBytes,
               fingerprint: fp.fingerprint,
               durationMs: asset.duration > 0 ? asset.duration * 1000 : target.durationMs,
+              fileName: p.basename(file.path),
             );
           }
         }

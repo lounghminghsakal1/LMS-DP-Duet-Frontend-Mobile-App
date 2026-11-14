@@ -9,6 +9,8 @@ import 'package:duet/features/library/domain/fingerprint.dart';
 import 'package:duet/features/player/data/youtube_sync_player.dart';
 import 'package:duet/features/session/domain/clock_sync.dart';
 import 'package:duet/features/session/domain/room_state.dart';
+import 'package:duet/features/sharing/data/chunked_reader.dart';
+import 'package:duet/features/sharing/domain/share_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -133,6 +135,45 @@ void main() {
       expect(reloaded.all.map((e) => e.key), ['yt:dQw4w9WgXcQ', 'a']);
       expect(reloaded.get('yt:dQw4w9WgXcQ')!.positionMs, 42000);
       expect(TogetherStats.from(reloaded.all).togetherMs, 60000);
+    });
+  });
+
+  group('ChunkedReader', () {
+    test('splits an unevenly chunked stream into exact parts', () async {
+      final data = List<int>.generate(1000, (i) => i % 251);
+      // Chunks of odd sizes, like a real file/content stream.
+      final chunks = <List<int>>[];
+      for (var i = 0; i < data.length;) {
+        final size = [7, 120, 33, 300, 1][chunks.length % 5];
+        chunks.add(data.sublist(i, min(i + size, data.length)));
+        i += size;
+      }
+      final reader = ChunkedReader(Stream.fromIterable(chunks));
+      final parts = <List<int>>[];
+      while (true) {
+        final part = await reader.next(256);
+        if (part == null) break;
+        parts.add(part);
+      }
+      expect(parts.map((p) => p.length), [256, 256, 256, 232]);
+      expect(parts.expand((p) => p).toList(), data);
+    });
+
+    test('share part sizes', () {
+      const share = ShareInfo(
+        id: 's',
+        fingerprint: 'f',
+        title: 't',
+        kind: 'video',
+        sizeBytes: 25 * 1024 * 1024 + 123,
+        partSize: 10 * 1024 * 1024,
+        partCount: 3,
+        status: 'uploading',
+      );
+      expect(share.sizeOfPart(1), 10 * 1024 * 1024);
+      expect(share.sizeOfPart(3), 5 * 1024 * 1024 + 123);
+      expect(mimeTypeFor('Movie.2024.MKV'), 'video/x-matroska');
+      expect(mimeTypeFor('song.mp3'), 'audio/mpeg');
     });
   });
 

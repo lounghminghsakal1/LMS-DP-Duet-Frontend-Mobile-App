@@ -8,10 +8,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:duet/core/config/server_config.dart';
+import 'package:duet/features/library/domain/fingerprint.dart';
 import 'package:duet/features/session/data/session_client.dart';
 import 'package:duet/features/session/domain/room_state.dart';
 import 'package:duet/features/session/domain/sync_engine.dart';
+import 'package:duet/features/sharing/data/share_repository.dart';
+import 'package:duet/features/sharing/data/share_uploader.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_player.dart';
@@ -160,6 +164,75 @@ void main() {
         await waitFor(() => alex.player.isPlaying && sam.player.isPlaying, 'auto-resumed for both');
         await Future<void>.delayed(const Duration(milliseconds: 1200));
         expect((alex.player.positionMs - sam.player.positionMs).abs(), lessThan(150));
+
+        // ---- WhatsApp-style reply
+        final replyArrived = alex.client.events.firstWhere(
+          (e) => e is ChatMessageReceived && e.message.replyTo?.id == message.message.id,
+        );
+        sam.client.sendChat(text: 'same 🥹', clientId: 'reply-$stamp', replyToId: message.message.id);
+        final reply = (await replyArrived.timeout(const Duration(seconds: 5))) as ChatMessageReceived;
+        expect(reply.message.replyTo!.body, 'this scene 😍');
+
+        // ---- partner leaves the player → "continue watching" alone
+        sam.client.markUnready();
+        await waitFor(() => !alex.player.isPlaying, 'paused when partner left the player');
+        expect(alex.client.room!.playback.pausedReason?.reason, 'not_ready');
+        alex.client.play(alex.player.positionMs, solo: true);
+        await waitFor(() => alex.player.isPlaying, 'alex continues alone');
+
+        // ---- temporary sharing: Alex has a file Sam doesn't → upload → Sam streams it
+        final dir = await Directory.systemTemp.createTemp('duet_e2e');
+        final file = File('${dir.path}/Our Song.mp3');
+        final bytes = List<int>.generate(23 * 1024 * 1024 + 77, (i) => (i * 7 + 3) % 256);
+        await file.writeAsBytes(bytes);
+        final fp = await fingerprintFile(file.path);
+        alex.client.loadMedia(kind: MediaKind.audio, title: 'Our Song', fingerprint: fp.fingerprint, sizeBytes: fp.sizeBytes);
+        await waitFor(() => sam.client.room?.media?.title == 'Our Song', 'song loaded');
+
+        final asked = alex.client.events.firstWhere((e) => e is ShareRequested);
+        sam.client.requestShare();
+        await asked.timeout(const Duration(seconds: 5));
+
+        final alexRepo = ShareRepository(Dio(BaseOptions(baseUrl: '$server/api', headers: {'Authorization': 'Bearer $tokenA'})));
+        final created = await alexRepo.create(
+          fingerprint: fp.fingerprint,
+          title: 'Our Song',
+          kind: 'audio',
+          sizeBytes: fp.sizeBytes,
+          fileName: 'Our Song.mp3',
+        );
+        var lastProgress = 0;
+        await ShareUploader(repository: alexRepo).upload(
+          share: created.share,
+          alreadyUploaded: created.uploaded,
+          openStream: file.openRead,
+          onProgress: (b) {
+            lastProgress = b;
+            alex.client.reportShareProgress(created.share.id, b);
+          },
+        );
+        expect(lastProgress, fp.sizeBytes);
+        await waitFor(() => sam.client.room?.share?.isReady == true, 'sam sees the share is ready');
+
+        final samRepo = ShareRepository(Dio(BaseOptions(baseUrl: '$server/api', headers: {'Authorization': 'Bearer $tokenB'})));
+        final link = await samRepo.streamUrl(created.share.id);
+        final http = HttpClient();
+        final req = await http.getUrl(Uri.parse(link.url));
+        req.headers.set('Range', 'bytes=${15 * 1024 * 1024}-${15 * 1024 * 1024 + 9}');
+        final res = await req.close();
+        final ranged = await res.fold<List<int>>([], (all, chunk) => all..addAll(chunk));
+        expect(res.statusCode, 206);
+        expect(ranged, bytes.sublist(15 * 1024 * 1024, 15 * 1024 * 1024 + 10));
+
+        // Ending the session deletes the upload.
+        alex.client.clearMedia();
+        await waitFor(() => sam.client.room?.media == null, 'session ended');
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        final after = await (await http.getUrl(Uri.parse(link.url))).close();
+        await after.drain<void>();
+        expect(after.statusCode, 404, reason: 'shared file deleted after the session');
+        http.close();
+        await dir.delete(recursive: true);
       } finally {
         await alex.close();
         await sam.close();

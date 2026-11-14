@@ -103,23 +103,27 @@ class ChatController extends Notifier<ChatState> {
 
   /// Sends a message. While playing, [positionMs] tags it with the current
   /// moment so either of you can tap it later to jump back to that scene.
-  void send(String text, {int? positionMs, String? mediaTitle}) {
+  void send(String text, {int? positionMs, String? mediaTitle, ChatMessage? replyTo}) {
     final body = text.trim();
     final myId = _myId;
     if (body.isEmpty || myId == null) return;
     final clientId = randomId();
+    // You can only quote messages the server already has.
+    final quote = replyTo != null && !replyTo.pending ? ReplyPreview.of(replyTo) : null;
     final pending = ChatMessage.pending(
       clientId: clientId,
       senderId: myId,
       body: body,
       mediaTitle: positionMs != null ? mediaTitle : null,
       mediaPositionMs: positionMs,
+      replyTo: quote,
     );
     state = state.copyWith(messages: [...state.messages, pending]);
     ref.read(sessionControllerProvider.notifier).client?.sendChat(
           text: body,
           clientId: clientId,
           positionMs: positionMs,
+          replyToId: quote?.id,
         );
     // If we are offline it stays "pending" and is re-sent on reconnect.
   }
@@ -169,7 +173,12 @@ class ChatController extends Notifier<ChatState> {
     final client = ref.read(sessionControllerProvider.notifier).client;
     if (client == null) return;
     for (final m in state.messages.where((m) => m.pending)) {
-      client.sendChat(text: m.body, clientId: m.clientId!, positionMs: m.mediaPositionMs);
+      client.sendChat(
+        text: m.body,
+        clientId: m.clientId!,
+        positionMs: m.mediaPositionMs,
+        replyToId: m.replyTo?.id,
+      );
     }
   }
 }

@@ -1,27 +1,39 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../storage/prefs.dart';
 
-/// Default backend address. Override at build time:
-///   flutter run --dart-define=API_BASE_URL=http://192.168.1.26:4747
+/// Optional build-time override: flutter run --dart-define=API_BASE_URL=http://192.168.1.37:4747
+const String _dartDefineServerUrl = String.fromEnvironment('API_BASE_URL');
+
+/// Used only if neither --dart-define nor .env provide a value.
 /// 10.0.2.2 is "localhost of the computer" as seen from the Android emulator.
-const String kDefaultServerUrl = String.fromEnvironment(
-  'API_BASE_URL',
-  defaultValue: "http://192.168.1.37:4747"
-  // defaultValue: 'http://10.0.2.2:4747',
-);
+const String _fallbackServerUrl = 'http://10.0.2.2:4747';
+
+/// Default backend address: --dart-define → `.env` (API_BASE_URL) → emulator fallback.
+///
+/// NOTE: the app's `.env` is bundled inside the APK, so it must only hold
+/// non-secret config like this URL — never passwords or AWS keys.
+String get kDefaultServerUrl {
+  if (_dartDefineServerUrl.isNotEmpty) return _clean(_dartDefineServerUrl);
+  final fromEnv = dotenv.isInitialized ? dotenv.maybeGet('API_BASE_URL')?.trim() : null;
+  if (fromEnv != null && fromEnv.isNotEmpty) return _clean(fromEnv);
+  return _fallbackServerUrl;
+}
+
+String _clean(String value) {
+  var url = value.trim();
+  if (!url.startsWith('http://') && !url.startsWith('https://')) url = 'http://$url';
+  while (url.endsWith('/')) {
+    url = url.substring(0, url.length - 1);
+  }
+  return url;
+}
 
 /// Adds a scheme if missing and strips trailing slashes.
 String normalizeServerUrl(String input) {
-  var value = input.trim();
-  if (value.isEmpty) return kDefaultServerUrl;
-  if (!value.startsWith('http://') && !value.startsWith('https://')) {
-    value = 'http://$value';
-  }
-  while (value.endsWith('/')) {
-    value = value.substring(0, value.length - 1);
-  }
-  return value;
+  if (input.trim().isEmpty) return kDefaultServerUrl;
+  return _clean(input);
 }
 
 /// http://host:port -> ws://host:port/ws  (https -> wss)
@@ -33,6 +45,7 @@ Uri webSocketUriFor(String httpBase) {
 
 /// The server URL is editable from the sign-in screen so both phones can point
 /// at a laptop on the same Wi-Fi or at a deployed server without rebuilding.
+/// Only an address the user saved in the app overrides the `.env` value.
 class ServerUrlNotifier extends Notifier<String> {
   static const _prefsKey = 'server_url';
 
@@ -44,7 +57,12 @@ class ServerUrlNotifier extends Notifier<String> {
 
   Future<void> set(String url) async {
     final normalized = normalizeServerUrl(url);
-    await ref.read(sharedPreferencesProvider).setString(_prefsKey, normalized);
+    final prefs = ref.read(sharedPreferencesProvider);
+    if (normalized == kDefaultServerUrl) {
+      await prefs.remove(_prefsKey); // keep following .env
+    } else {
+      await prefs.setString(_prefsKey, normalized);
+    }
     state = normalized;
   }
 

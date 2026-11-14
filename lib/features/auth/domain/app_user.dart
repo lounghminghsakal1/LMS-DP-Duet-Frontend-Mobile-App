@@ -6,7 +6,11 @@ class AppUser {
     required this.avatarEmoji,
     this.coupleId,
     this.online,
+    this.lastSeenAt,
   });
+
+  /// When they were last connected (partner only).
+  final DateTime? lastSeenAt;
 
   final String id;
   final String email;
@@ -24,6 +28,7 @@ class AppUser {
         avatarEmoji: (json['avatarEmoji'] as String?) ?? '💜',
         coupleId: json['coupleId'] as String?,
         online: json['online'] as bool?,
+        lastSeenAt: DateTime.tryParse(json['lastSeenAt'] as String? ?? '')?.toLocal(),
       );
 
   Map<String, dynamic> toJson() => {

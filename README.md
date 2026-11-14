@@ -15,9 +15,19 @@ Backend: `D:\Backend Projects\Duet-Backend-Nodejs`.
 * **YouTube together.** Paste a link (it's even auto-detected from the clipboard).
 * **Perfect sync.** Play starts on the same server tick on both phones. Small drift is fixed
   by nudging speed 5%; big drift by seeking. Pause, seek and speed apply to both.
+* **Movie only on one phone?** Your partner taps "Stream from [name]'s copy". You approve,
+  your phone uploads it temporarily to a private S3 bucket, and they stream it in sync. It's
+  deleted automatically when you end, finish, or leave.
 * **Live chat** while watching (below the video, or as a side panel in landscape), with a
   typing indicator. Messages sent during playback get a 🎬 timestamp chip. **Tap it and you
   both jump back to that scene.**
+* **Reply like WhatsApp**: swipe a message right (or long-press → Reply) to quote it. Tap a
+  quote to jump to the original.
+* **Partner presence**: "online" or "last seen 5 min ago" on home, chat and the player, plus a
+  notice when they go offline or come back.
+* **"Partner left" popup**: if they leave or lose connection mid-movie, it pauses and asks
+  **Leave** (back home) or **Continue** (keep watching alone). If they come back, you're back
+  in sync automatically.
 * **Floating reactions** ❤️😂😮😢🔥👏🥰 that fly up on both screens.
 * **Love taps.** Hug 🤗, kiss 💋, miss you 🥺, come watch 🍿. Your partner's phone buzzes
   with a heart burst.
@@ -30,17 +40,30 @@ Backend: `D:\Backend Projects\Duet-Backend-Nodejs`.
   fullscreen on rotate. Leaving the app pauses for both.
 * **Plays almost anything**: mkv, mp4, avi, webm, flac, mp3… (libmpv via media_kit).
 
+## Config (`.env`)
+
+Copy `.env.example` to `.env` and set the backend address:
+
+```
+API_BASE_URL=http://192.168.1.37:4747
+```
+
+⚠️ The app's `.env` is **bundled inside the APK**, so anyone who has the APK can read it. Only
+put non-secret settings here. The database password, JWT secret and AWS keys live only in the
+backend's `.env`.
+
+Priority order: `--dart-define=API_BASE_URL=…` → `.env` → `http://10.0.2.2:4747` (emulator).
+You can also change the server inside the app: tap the server chip on the sign-in screen, or
+go to Profile → Server. "Default" switches back to the `.env` value. Both phones must use the
+same server.
+
 ## Run
 
 ```bash
 flutter pub get
-flutter run                                   # Android emulator → uses http://10.0.2.2:4747
-flutter run --dart-define=API_BASE_URL=http://192.168.1.26:4747   # real phone on your Wi-Fi
-flutter build apk --release --dart-define=API_BASE_URL=https://your-duet-server.com
+flutter run
+flutter build apk --release --split-per-abi
 ```
-
-You can also change the server inside the app: tap the server chip on the sign-in screen,
-or go to Profile → Server. Both phones must use the same server.
 
 ## Tests
 
@@ -65,7 +88,8 @@ lib/
       presentation/    SessionController (Riverpod)
     library/           device library (photo_manager), file picker, fingerprint, auto-find
     player/            media_kit + YouTube players, watch screen, start/join flows
-    chat/              chat controller + view
+    sharing/           temporary upload (resumable multipart → S3) + streaming
+    chat/              chat controller + view (replies)
     history/           local history store, continue watching, stats
     profile/           name, avatar, unpair, sign out
 ```

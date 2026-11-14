@@ -59,6 +59,37 @@ class Reconnected extends SessionEvent {
   const Reconnected();
 }
 
+/// Your partner doesn't have the current movie and asks you to share it.
+class ShareRequested extends SessionEvent {
+  const ShareRequested(this.userId);
+
+  final String userId;
+}
+
+class ShareDeclined extends SessionEvent {
+  const ShareDeclined(this.userId);
+
+  final String userId;
+}
+
+/// What the server allows for temporary sharing (from auth:ok).
+class SharingInfo {
+  const SharingInfo({this.enabled = false, this.maxBytes = 0, this.storage = 'off'});
+
+  final bool enabled;
+  final int maxBytes;
+  final String storage;
+
+  factory SharingInfo.fromJson(Object? json) {
+    if (json is! Map) return const SharingInfo();
+    return SharingInfo(
+      enabled: json['enabled'] == true,
+      maxBytes: (json['maxBytes'] as num?)?.toInt() ?? 0,
+      storage: (json['storage'] as String?) ?? 'off',
+    );
+  }
+}
+
 /// Plain-Dart realtime client (no Flutter), so it can be tested against a real
 /// server. Owns the socket, the clock offset and the latest room state.
 class SessionClient {
@@ -98,6 +129,7 @@ class SessionClient {
   bool roomLoaded = false;
   String? myUserId;
   bool partnerTyping = false;
+  SharingInfo sharing = const SharingInfo();
 
   Stream<SessionEvent> get events => _events.stream;
 
@@ -145,15 +177,20 @@ class SessionClient {
     });
   }
 
-  bool markReady({String? fingerprint, bool force = false, int? durationMs}) => _socket.send('media:ready', {
+  bool markReady({String? fingerprint, bool force = false, int? durationMs, bool streaming = false}) =>
+      _socket.send('media:ready', {
         'fingerprint': ?fingerprint,
         if (force) 'force': true,
         if (durationMs != null && durationMs > 0) 'durationMs': durationMs,
+        if (streaming) 'streaming': true,
       });
 
   bool markUnready() => _socket.send('media:unready');
   bool clearMedia() => _socket.send('media:clear');
-  bool play(int positionMs) => _socket.send('playback:play', {'positionMs': positionMs});
+
+  /// [solo] = continue without the partner (they left or are still loading).
+  bool play(int positionMs, {bool solo = false}) =>
+      _socket.send('playback:play', {'positionMs': positionMs, if (solo) 'solo': true});
   bool pause(int positionMs) => _socket.send('playback:pause', {'positionMs': positionMs});
   bool seek(int positionMs) => _socket.send('playback:seek', {'positionMs': positionMs});
   bool setRate(double rate) => _socket.send('playback:rate', {'rate': rate});
@@ -162,11 +199,19 @@ class SessionClient {
   bool react(String emoji) => _socket.send('reaction', {'emoji': emoji});
   bool nudge(String kind) => _socket.send('nudge', {'kind': kind});
 
-  bool sendChat({required String text, required String clientId, int? positionMs}) => _socket.send('chat:send', {
+  bool sendChat({required String text, required String clientId, int? positionMs, String? replyToId}) =>
+      _socket.send('chat:send', {
         'text': text,
         'clientId': clientId,
         'positionMs': ?positionMs,
+        'replyToId': ?replyToId,
       });
+
+  /// Ask the partner to upload the current movie so this phone can stream it.
+  bool requestShare() => _socket.send('share:request');
+  bool declineShare() => _socket.send('share:decline');
+  bool reportShareProgress(String shareId, int uploadedBytes) =>
+      _socket.send('share:progress', {'shareId': shareId, 'uploadedBytes': uploadedBytes});
 
   /// Sends a few pings and waits for the answers, so the clock offset is good
   /// before anything time-critical happens.
@@ -210,6 +255,7 @@ class SessionClient {
     switch (frame.type) {
       case 'auth:ok':
         myUserId = (data['user'] as Map?)?['id'] as String?;
+        sharing = SharingInfo.fromJson(data['sharing']);
         final serverTime = (data['serverTime'] as num?)?.toInt();
         // Rough first guess until the first pong arrives.
         if (serverTime != null) clock.setProvisional(serverTime);
@@ -246,6 +292,17 @@ class SessionClient {
         _emit(ReactionReceived(data['userId'] as String, data['emoji'] as String));
       case 'nudge':
         _emit(NudgeReceived(data['userId'] as String, data['kind'] as String));
+      case 'share:requested':
+        _emit(ShareRequested(data['userId'] as String));
+      case 'share:declined':
+        _emit(ShareDeclined(data['userId'] as String));
+      case 'share:progress':
+        final current = room;
+        final share = current?.share;
+        if (current != null && share != null && share.id == data['shareId']) {
+          room = current.withShare(share.copyWith(uploadedBytes: (data['uploadedBytes'] as num).toInt()));
+          _notify();
+        }
       case 'pair:invite' || 'pair:declined' || 'pair:cancelled' || 'pair:updated':
         _emit(PairingChanged(frame.type, data));
       case 'error':

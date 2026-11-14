@@ -7,7 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/theme/app_theme.dart';
+import '../core/utils/format.dart';
 import '../features/chat/presentation/chat_controller.dart';
+import '../features/sharing/presentation/share_controller.dart';
 import '../features/session/data/session_client.dart';
 import '../features/session/presentation/session_controller.dart';
 import 'router.dart';
@@ -53,6 +55,8 @@ class _GlobalSessionListenerState extends ConsumerState<_GlobalSessionListener> 
   StreamSubscription<SessionEvent>? _sub;
   final _bursts = <int>[];
   int _nextBurst = 0;
+  Timer? _offlineTimer;
+  bool _announcedOffline = false;
 
   @override
   void initState() {
@@ -63,7 +67,26 @@ class _GlobalSessionListenerState extends ConsumerState<_GlobalSessionListener> 
   @override
   void dispose() {
     _sub?.cancel();
+    _offlineTimer?.cancel();
     super.dispose();
+  }
+
+  /// "Sam went offline" / "Sam is back online" outside the player (the player has
+  /// its own popup). Waits a few seconds so short network blips don't spam you.
+  void _onPresence(bool online) {
+    _offlineTimer?.cancel();
+    if (!online) {
+      _offlineTimer = Timer(const Duration(seconds: 5), () {
+        final partner = ref.read(sessionControllerProvider).partner;
+        if (partner == null || partner.online || _currentPath == '/watch') return;
+        _announcedOffline = true;
+        _snack('⚫  ${partner.displayName} went offline');
+      });
+    } else if (_announcedOffline) {
+      _announcedOffline = false;
+      final partner = ref.read(sessionControllerProvider).partner;
+      if (_currentPath != '/watch') _snack('💚  ${partner?.displayName ?? 'Your partner'} is back online');
+    }
   }
 
   String get _currentPath {
@@ -100,10 +123,58 @@ class _GlobalSessionListenerState extends ConsumerState<_GlobalSessionListener> 
           action: _joinAction(),
           duration: const Duration(seconds: 8),
         );
+      case RoomEventReceived(:final event) when event.kind == 'presence' && event.userId != session.myUserId:
+        _onPresence(event.online == true);
+      case ShareRequested():
+        _askToShare();
       case ServerErrorReceived(:final code, :final message) when code == 'partner_offline' || code == 'not_paired':
         _snack(message);
       default:
         break;
+    }
+  }
+
+  /// The partner doesn't have the current movie: offer to upload it temporarily.
+  Future<void> _askToShare() async {
+    final session = ref.read(sessionControllerProvider);
+    final media = session.media;
+    final dialogContext = widget.router.routerDelegate.navigatorKey.currentContext;
+    if (media == null || dialogContext == null) return;
+    final client = ref.read(sessionControllerProvider.notifier).client;
+    if (ref.read(shareControllerProvider).isBusy) return;
+    final partnerName = session.partner?.displayName ?? 'Your partner';
+    final size = media.sizeBytes != null && media.sizeBytes! > 1 ? ' (${formatBytes(media.sizeBytes!)})' : '';
+
+    final share = await showDialog<bool>(
+      context: dialogContext,
+      builder: (context) => AlertDialog(
+        icon: const Text('📤', style: TextStyle(fontSize: 34)),
+        title: Text('Share “${media.title}” with $partnerName?'),
+        content: Text(
+          '$partnerName doesn\'t have this file. Duet will upload your copy$size so they can stream it '
+          'while you watch together.\n\n'
+          '• It\'s private and deleted automatically when you finish.\n'
+          '• It uses your internet — Wi-Fi is best.\n'
+          '• Keep Duet open until the upload finishes.',
+          style: const TextStyle(color: DuetColors.textMuted, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Not now', style: TextStyle(color: DuetColors.textMuted)),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(minimumSize: const Size(110, 44)),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Share it'),
+          ),
+        ],
+      ),
+    );
+    if (share == true) {
+      ref.read(shareControllerProvider.notifier).shareCurrent();
+    } else {
+      client?.declineShare();
     }
   }
 
@@ -129,6 +200,17 @@ class _GlobalSessionListenerState extends ConsumerState<_GlobalSessionListener> 
 
   @override
   Widget build(BuildContext context) {
+    // Upload outcome notifications (the uploader may be on any screen).
+    ref.listen(shareControllerProvider.select((s) => s.status), (previous, status) {
+      final state = ref.read(shareControllerProvider);
+      final partnerName = ref.read(sessionControllerProvider).partner?.displayName ?? 'your partner';
+      if (status == ShareUploadStatus.done && previous == ShareUploadStatus.uploading) {
+        _snack('🎉  Uploaded — $partnerName can watch “${state.title}” now');
+      } else if (status == ShareUploadStatus.failed && state.error != null) {
+        _snack('⚠️  ${state.error}', duration: const Duration(seconds: 6));
+      }
+    });
+
     return Stack(
       children: [
         widget.child,

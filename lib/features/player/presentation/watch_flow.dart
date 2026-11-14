@@ -10,6 +10,7 @@ import '../../history/presentation/history_controller.dart';
 import '../../library/data/media_library.dart';
 import '../../library/domain/local_media.dart';
 import '../../session/domain/room_state.dart';
+import '../../session/presentation/presence.dart';
 import '../../session/presentation/session_controller.dart';
 
 /// Everything the watch screen needs to open the media on this phone.
@@ -172,10 +173,20 @@ abstract final class WatchFlow {
   }
 
   /// If the partner is in the middle of something else, ask before replacing it.
+  /// If they are offline, say so (they can still join later).
   static Future<bool> _confirmReplace(BuildContext context, WidgetRef ref, String newTitle) async {
     final session = ref.read(sessionControllerProvider);
     final current = session.media;
     final partner = session.partner;
+    if (partner != null && !partner.online) {
+      return confirmDialog(
+        context,
+        title: '${partner.displayName} is offline',
+        message: '${partner.displayName} is ${presenceText(partner)}. Start “$newTitle” anyway? '
+            'They can join from where you are as soon as they open Duet.',
+        confirmLabel: 'Start anyway',
+      );
+    }
     if (current == null || partner == null || !partner.online || current.loadedBy == session.myUserId) {
       return true;
     }

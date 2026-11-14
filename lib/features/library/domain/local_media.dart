@@ -9,7 +9,17 @@ class LocalMedia {
     required this.sizeBytes,
     required this.fingerprint,
     this.durationMs,
+    this.shareId,
+    this.fileName,
   });
+
+  /// Original file name with extension (e.g. "Movie.2024.mkv"), when known.
+  final String? fileName;
+
+  /// Set when this is the partner's temporary upload streamed from the server
+  /// ([source] is then a time-limited https link, not a file on this phone).
+  final String? shareId;
+  bool get isStreamed => shareId != null;
 
   final MediaKind kind;
 
@@ -24,12 +34,14 @@ class LocalMedia {
 
   bool get isContentUri => source.startsWith('content://');
 
-  LocalMedia copyWith({int? durationMs, String? title}) => LocalMedia(
+  LocalMedia copyWith({int? durationMs, String? title, String? source}) => LocalMedia(
         kind: kind,
-        source: source,
+        source: source ?? this.source,
         title: title ?? this.title,
         sizeBytes: sizeBytes,
         fingerprint: fingerprint,
         durationMs: durationMs ?? this.durationMs,
+        shareId: shareId,
+        fileName: fileName,
       );
 }

@@ -131,6 +131,8 @@ class RoomMember {
     required this.ready,
     required this.buffering,
     this.matched,
+    this.streaming = false,
+    this.lastSeenAt,
   });
 
   final String userId;
@@ -143,6 +145,12 @@ class RoomMember {
   /// null until they loaded the media; false when they forced a different file.
   final bool? matched;
 
+  /// Watching the partner's temporary upload instead of their own copy.
+  final bool streaming;
+
+  /// When they were last connected (null if never / unknown).
+  final DateTime? lastSeenAt;
+
   factory RoomMember.fromJson(Map<String, dynamic> json) => RoomMember(
         userId: json['userId'] as String,
         displayName: (json['displayName'] as String?) ?? 'Partner',
@@ -151,7 +159,56 @@ class RoomMember {
         ready: json['ready'] as bool? ?? false,
         buffering: json['buffering'] as bool? ?? false,
         matched: json['matched'] as bool?,
+        streaming: json['streaming'] as bool? ?? false,
+        lastSeenAt: json['lastSeenAt'] is num
+            ? DateTime.fromMillisecondsSinceEpoch((json['lastSeenAt'] as num).toInt())
+            : null,
       );
+}
+
+/// A temporary upload of the current media so a partner without the file can stream it.
+class RoomShare {
+  const RoomShare({
+    required this.id,
+    required this.fingerprint,
+    required this.status,
+    required this.sizeBytes,
+    required this.uploadedBytes,
+    required this.uploaderId,
+  });
+
+  final String id;
+  final String fingerprint;
+
+  /// uploading | ready
+  final String status;
+  final int sizeBytes;
+  final int uploadedBytes;
+  final String? uploaderId;
+
+  bool get isReady => status == 'ready';
+  double get progress => sizeBytes <= 0 ? 0 : (uploadedBytes / sizeBytes).clamp(0, 1).toDouble();
+
+  RoomShare copyWith({int? uploadedBytes}) => RoomShare(
+        id: id,
+        fingerprint: fingerprint,
+        status: status,
+        sizeBytes: sizeBytes,
+        uploadedBytes: uploadedBytes ?? this.uploadedBytes,
+        uploaderId: uploaderId,
+      );
+
+  static RoomShare? fromJson(Object? json) {
+    if (json is! Map) return null;
+    return RoomShare(
+      id: json['id'] as String,
+      fingerprint: json['fingerprint'] as String,
+      status: json['status'] as String,
+      sizeBytes: (json['sizeBytes'] as num).toInt(),
+      uploadedBytes: (json['uploadedBytes'] as num?)?.toInt() ?? 0,
+      uploaderId: json['uploaderId'] as String?,
+    );
+  }
 }
 
 class RoomState {
@@ -161,10 +218,12 @@ class RoomState {
     required this.playback,
     required this.members,
     required this.serverTime,
+    this.share,
   });
 
   final String coupleId;
   final RoomMedia? media;
+  final RoomShare? share;
   final PlaybackState playback;
   final List<RoomMember> members;
   final int serverTime;
@@ -187,9 +246,19 @@ class RoomState {
   List<RoomMember> get waitingFor =>
       media == null ? const [] : members.where((m) => m.online && (!m.ready || m.buffering)).toList();
 
+  RoomState withShare(RoomShare? share) => RoomState(
+        coupleId: coupleId,
+        media: media,
+        playback: playback,
+        members: members,
+        serverTime: serverTime,
+        share: share,
+      );
+
   factory RoomState.fromJson(Map<String, dynamic> json) => RoomState(
         coupleId: json['coupleId'] as String,
         media: json['media'] == null ? null : RoomMedia.fromJson(json['media'] as Map<String, dynamic>),
+        share: RoomShare.fromJson(json['share']),
         playback: PlaybackState.fromJson(json['playback'] as Map<String, dynamic>),
         members: [
           for (final m in (json['members'] as List? ?? const [])) RoomMember.fromJson(m as Map<String, dynamic>),
@@ -212,9 +281,11 @@ class RoomEvent {
     this.rate,
     this.buffering,
     this.matched,
+    this.shareId,
   });
 
   final String kind;
+  final String? shareId;
   final String? by;
   final String? userId;
   final String? reason;
@@ -243,5 +314,6 @@ class RoomEvent {
         rate: (json['rate'] as num?)?.toDouble(),
         buffering: json['buffering'] as bool?,
         matched: json['matched'] as bool?,
+        shareId: json['shareId'] as String?,
       );
 }

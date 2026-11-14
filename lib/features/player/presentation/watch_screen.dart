@@ -20,7 +20,10 @@ import '../../session/data/session_client.dart';
 import '../../session/domain/room_state.dart';
 import '../../session/domain/sync_engine.dart';
 import '../../session/domain/syncable_player.dart';
+import '../../session/presentation/presence.dart';
 import '../../session/presentation/session_controller.dart';
+import '../../sharing/data/share_repository.dart';
+import '../../sharing/presentation/share_controller.dart';
 import '../data/media_kit_sync_player.dart';
 import '../data/youtube_sync_player.dart';
 import 'watch_flow.dart';
@@ -39,7 +42,12 @@ class WatchScreen extends ConsumerStatefulWidget {
 
 class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingObserver {
   late final SessionController _session;
+  late final HistoryController _history;
+  late final ActiveLocalMedia _activeMedia;
   late final SyncablePlayer _player;
+  StreamSubscription<String>? _streamErrorSub;
+  bool _refreshingStream = false;
+  DateTime? _lastStreamRefresh;
   MediaKitSyncPlayer? _mediaKit;
   YoutubeSyncPlayer? _youtube;
   late final SyncEngine _engine;
@@ -78,6 +86,13 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _session = ref.read(sessionControllerProvider.notifier);
+    _history = ref.read(historyControllerProvider.notifier);
+    _activeMedia = ref.read(activeLocalMediaProvider.notifier);
+    final local = widget.args.local;
+    if (local != null && !local.isStreamed) {
+      // Lets "share with partner" reuse this exact file without searching.
+      Future.microtask(() => _activeMedia.set(local));
+    }
 
     if (_media.kind == MediaKind.youtube) {
       _youtube = YoutubeSyncPlayer(
@@ -88,6 +103,9 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
     } else {
       _mediaKit = MediaKitSyncPlayer(video: _media.kind == MediaKind.video);
       _player = _mediaKit!;
+      if (local?.isStreamed == true) {
+        _streamErrorSub = _mediaKit!.player.stream.error.listen((_) => _refreshStream());
+      }
     }
 
     _engine = SyncEngine(
@@ -141,10 +159,36 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
     if (state == AppLifecycleState.resumed) _client?.reconnectNow();
   }
 
+  /// Streaming links expire (or the network hiccups): get a fresh link and
+  /// reopen at the right moment.
+  Future<void> _refreshStream() async {
+    final shareId = widget.args.local?.shareId;
+    final mediaKit = _mediaKit;
+    if (shareId == null || mediaKit == null || _refreshingStream || _leaving) return;
+    final now = DateTime.now();
+    if (_lastStreamRefresh != null && now.difference(_lastStreamRefresh!) < const Duration(seconds: 20)) return;
+    _refreshingStream = true;
+    _lastStreamRefresh = now;
+    try {
+      final link = await ref.read(shareRepositoryProvider).streamUrl(shareId);
+      if (!mounted) return;
+      await mediaKit.open(link.url, start: Duration(milliseconds: _engine.expectedPositionMs()));
+      _engine.playerReady();
+    } catch (_) {
+      if (mounted) _showBanner('The shared stream is no longer available');
+    } finally {
+      _refreshingStream = false;
+    }
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _saveHistory();
+    _streamErrorSub?.cancel();
+    final activeMedia = _activeMedia;
+    final mine = widget.args.local;
+    Future.microtask(() => activeMedia.clearIf(mine));
     _eventsSub?.cancel();
     _playerSub?.cancel();
     _historyTimer?.cancel();
@@ -210,8 +254,26 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
       fingerprint: widget.args.local?.fingerprint,
       force: widget.args.forceMismatch,
       durationMs: _player.duration?.inMilliseconds,
+      streaming: widget.args.local?.isStreamed ?? false,
     );
     _engine.playerReady();
+  }
+
+  /// The partner left the player / lost connection while we were watching:
+  /// show "Leave" / "Continue watching". Derived from the room state, so it also
+  /// closes by itself when they come back (the server auto-resumes).
+  PausedReason? _partnerLeft(SessionSnapshot snapshot) {
+    final room = snapshot.room;
+    if (room == null || room.media?.key != _media.key || room.playback.playing) return null;
+    final reason = room.playback.pausedReason;
+    if (reason == null || reason.userId == snapshot.myUserId) return null;
+    if (reason.reason != 'partner_left' && reason.reason != 'not_ready') return null;
+    return reason;
+  }
+
+  void _continueAlone() {
+    HapticFeedback.selectionClick();
+    _play(solo: true);
   }
 
   void _onPlayerChanged() {
@@ -267,20 +329,27 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
     }
   }
 
-  void _play() {
+  Future<void> _play({bool solo = false}) async {
     if (!_requireConnection()) return;
-    final room = ref.read(sessionControllerProvider).room;
-    final waiting = room?.waitingFor ?? const [];
-    if (waiting.isNotEmpty) {
+    final snapshot = ref.read(sessionControllerProvider);
+    final waiting = (snapshot.room?.waitingFor ?? const []).where((m) => m.userId != snapshot.myUserId).toList();
+    if (waiting.isNotEmpty && !solo) {
       final names = waiting.map((m) => m.displayName).join(' & ');
-      _showBanner('Waiting for $names to get ready…');
-      return;
+      final startAnyway = await confirmDialog(
+        context,
+        title: '$names isn\'t ready yet',
+        message: '$names is still opening it. Start without them? They\'ll jump to where you are when they\'re ready.',
+        confirmLabel: 'Start without them',
+        cancelLabel: 'Wait',
+      );
+      if (!startAnyway || !mounted) return;
+      solo = true;
     }
     var position = _player.position.inMilliseconds;
     final duration = _player.duration?.inMilliseconds;
     if (duration != null && position >= duration - 1000) position = 0; // replay from the start
     setState(() => _pendingPlay = true);
-    _client?.play(position);
+    _client?.play(position, solo: solo);
     Timer(const Duration(seconds: 4), () {
       if (mounted && _pendingPlay) setState(() => _pendingPlay = false);
     });
@@ -466,12 +535,10 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
       case 'member_ready' when byPartner:
         return event.matched == false ? '⚠  $partnerName is playing a different file' : '🎉  $partnerName is ready';
       case 'auto_pause':
-        return switch (event.reason) {
-          'partner_left' => '📶  $partnerName lost connection — paused',
-          'buffering' => byPartner ? '⏳  Waiting for $partnerName to buffer…' : null,
-          'not_ready' => byPartner ? '🚪  $partnerName stepped out — paused' : null,
-          _ => null,
-        };
+        // partner_left / not_ready open the "Leave / Continue watching" popup instead.
+        return event.reason == 'buffering' && byPartner ? '⏳  Waiting for $partnerName to buffer…' : null;
+      case 'play_solo' when byPartner:
+        return '▶  $partnerName kept watching — catching you up';
       case 'auto_resume':
         return '💞  Back together — resuming';
       case 'presence' when byPartner:
@@ -494,18 +561,20 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
     final position = _player.position.inMilliseconds;
     final elapsed = _historyClock.elapsedMilliseconds - _lastHistoryMs;
     _lastHistoryMs = _historyClock.elapsedMilliseconds;
-    final partner = ref.read(sessionControllerProvider).partner;
+    // No `ref` here: this also runs from dispose().
+    final partner = _session.client?.partner;
     final together = _player.isPlaying && partner != null && partner.online && partner.ready;
     final local = widget.args.local;
     final firstSave = !_historyStarted;
     _historyStarted = true;
-    ref.read(historyControllerProvider.notifier).record(
+    _history.record(
           key: _media.key,
           kind: _media.kind,
           title: local?.title ?? _youtube?.title ?? _media.title,
           positionMs: position,
           durationMs: _player.duration?.inMilliseconds,
-          source: local?.source,
+          // A streamed link expires, so it is not remembered as a source.
+          source: local?.isStreamed == true ? null : local?.source,
           youtubeId: _media.youtubeId,
           sizeBytes: local?.sizeBytes,
           togetherDeltaMs: together ? elapsed.clamp(0, 15000) : 0,
@@ -545,6 +614,15 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
             else
               _buildPortrait(snapshot),
             Positioned.fill(child: ReactionOverlay(key: _reactions)),
+            if (_partnerLeft(snapshot) case final reason?)
+              Positioned.fill(
+                child: _PartnerLeftModal(
+                  partner: snapshot.partner,
+                  reason: reason.reason,
+                  onLeave: () => _leave(endForBoth: false),
+                  onContinue: _continueAlone,
+                ),
+              ),
           ],
         ),
       ),
@@ -831,13 +909,28 @@ class _StatusStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final partner = snapshot.partner;
+    final share = snapshot.share;
+    final uploading = share != null && !share.isReady;
+    final iAmUploading = uploading && share.uploaderId == snapshot.myUserId;
     final (label, color, icon) = switch (partner) {
       null => ('Not paired', DuetColors.textFaint, Icons.person_off_rounded),
       _ when !snapshot.isConnected => ('Reconnecting…', DuetColors.amber, Icons.wifi_off_rounded),
-      final p when !p.online => ('${p.displayName} is offline', DuetColors.textFaint, Icons.cloud_off_rounded),
+      final p when !p.online =>
+        ('${p.displayName} is offline · ${presenceText(p)}', DuetColors.textFaint, Icons.cloud_off_rounded),
+      final p when iAmUploading => (
+          'Sharing with ${p.displayName} · ${(share.progress * 100).floor()}%',
+          DuetColors.violet,
+          Icons.cloud_upload_rounded,
+        ),
+      final p when uploading && !p.ready => (
+          '${p.displayName} will stream it after the upload · ${(share.progress * 100).floor()}%',
+          DuetColors.violet,
+          Icons.cloud_upload_rounded,
+        ),
       final p when p.buffering => ('${p.displayName} is buffering…', DuetColors.amber, Icons.hourglass_top_rounded),
       final p when !p.ready => ('${p.displayName} is getting ready…', DuetColors.amber, Icons.downloading_rounded),
       final p when p.matched == false => ('${p.displayName} has a different file', DuetColors.amber, Icons.warning_rounded),
+      final p when p.streaming => ('Watching with ${p.displayName} (streaming)', DuetColors.mint, Icons.favorite_rounded),
       final p => ('Watching with ${p.displayName}', DuetColors.mint, Icons.favorite_rounded),
     };
 
@@ -855,6 +948,103 @@ class _StatusStrip extends StatelessWidget {
             TextButton(onPressed: onNudge, child: const Text('Nudge 🍿')),
         ],
       ),
+    );
+  }
+}
+
+/// Popup when the partner leaves mid-movie: go home, or keep watching alone.
+class _PartnerLeftModal extends StatelessWidget {
+  const _PartnerLeftModal({
+    required this.partner,
+    required this.reason,
+    required this.onLeave,
+    required this.onContinue,
+  });
+
+  final RoomMember? partner;
+
+  /// partner_left (lost connection / closed the app) or not_ready (left the player).
+  final String reason;
+  final VoidCallback onLeave;
+  final VoidCallback onContinue;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = partner?.displayName ?? 'Your partner';
+    final lostConnection = reason == 'partner_left';
+    return Stack(
+      children: [
+        const ModalBarrier(dismissible: false, color: Color(0xB3000000)),
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 380),
+              child: Material(
+                color: DuetColors.surface,
+                borderRadius: BorderRadius.circular(26),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 26, 22, 18),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          EmojiAvatar(emoji: partner?.avatarEmoji ?? '💜', size: 64, online: false),
+                          Positioned(
+                            right: -10,
+                            top: -6,
+                            child: Text(lostConnection ? '📶' : '🚪', style: const TextStyle(fontSize: 22)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        lostConnection ? '$name lost connection' : '$name left the movie',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Paused for you. If $name comes back, you\'ll continue together automatically.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: DuetColors.textMuted, height: 1.4),
+                      ),
+                      const SizedBox(height: 22),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: onLeave,
+                              icon: const Icon(Icons.home_rounded, size: 20),
+                              label: const Text('Leave'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: FilledButton.icon(
+                              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+                              onPressed: onContinue,
+                              icon: const Icon(Icons.play_arrow_rounded),
+                              label: const Text('Continue'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Continue keeps watching on your own',
+                        style: TextStyle(color: DuetColors.textFaint, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

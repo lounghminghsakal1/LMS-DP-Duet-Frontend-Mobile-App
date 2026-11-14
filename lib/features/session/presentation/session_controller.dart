@@ -17,9 +17,13 @@ class SessionSnapshot {
     this.roomLoaded = false,
     this.myUserId,
     this.partnerTyping = false,
+    this.sharing = const SharingInfo(),
   });
 
   final ConnectionStatus connection;
+
+  /// Whether the server can temporarily host a movie for streaming.
+  final SharingInfo sharing;
   final RoomState? room;
 
   /// True once the server told us about the room at least once.
@@ -31,6 +35,12 @@ class SessionSnapshot {
   RoomMember? get me => room?.member(myUserId);
   RoomMember? get partner => room?.partnerOf(myUserId);
   RoomMedia? get media => room?.media;
+
+  /// The live share for the current media, if any.
+  RoomShare? get share {
+    final s = room?.share;
+    return s != null && s.fingerprint == media?.fingerprint ? s : null;
+  }
 }
 
 /// App-wide stream of one-off realtime events (chat, reactions, nudges, toasts).
@@ -86,6 +96,7 @@ class SessionController extends Notifier<SessionSnapshot> {
       roomLoaded: client.roomLoaded,
       myUserId: client.myUserId ?? state.myUserId,
       partnerTyping: client.partnerTyping,
+      sharing: client.sharing,
     );
   }
 
