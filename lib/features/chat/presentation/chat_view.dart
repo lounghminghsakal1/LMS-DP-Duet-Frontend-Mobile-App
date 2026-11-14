@@ -304,7 +304,7 @@ class _MessageTile extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: DuetColors.surfaceHigh.withValues(alpha: transparent ? 0.7 : 1),
+              color: context.palette.surfaceHigh.withValues(alpha: transparent ? 0.7 : 1),
               borderRadius: BorderRadius.circular(99),
             ),
             child: Text(
@@ -316,7 +316,7 @@ class _MessageTile extends StatelessWidget {
       );
     }
 
-    final bubbleColor = mine ? null : DuetColors.surfaceHigh.withValues(alpha: transparent ? 0.82 : 1);
+    final bubbleColor = mine ? null : context.palette.surfaceHigh.withValues(alpha: transparent ? 0.82 : 1);
     final radius = BorderRadius.only(
       topLeft: const Radius.circular(18),
       topRight: const Radius.circular(18),
@@ -326,7 +326,7 @@ class _MessageTile extends StatelessWidget {
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      color: highlighted ? DuetColors.pink.withValues(alpha: 0.16) : Colors.transparent,
+      color: highlighted ? context.palette.accent.withValues(alpha: 0.16) : Colors.transparent,
       padding: EdgeInsets.only(top: showGap ? 10 : 2),
       child: _SwipeToReply(
         enabled: !message.pending,
@@ -345,7 +345,7 @@ class _MessageTile extends StatelessWidget {
                       padding: const EdgeInsets.fromLTRB(14, 9, 14, 8),
                       decoration: BoxDecoration(
                         color: bubbleColor,
-                        gradient: mine ? DuetColors.accentGradient : null,
+                        gradient: mine ? context.palette.accentGradient : null,
                         borderRadius: radius,
                       ),
                       child: Column(
@@ -452,7 +452,7 @@ class _SwipeToReplyState extends State<_SwipeToReply> with SingleTickerProviderS
             opacity: (_dx / _trigger).clamp(0, 1).toDouble(),
             child: Padding(
               padding: const EdgeInsets.only(left: 4),
-              child: Icon(Icons.reply_rounded, color: _armed ? DuetColors.pink : DuetColors.textMuted, size: 22),
+              child: Icon(Icons.reply_rounded, color: _armed ? context.palette.accent : DuetColors.textMuted, size: 22),
             ),
           ),
           Transform.translate(offset: Offset(_dx, 0), child: widget.child),
@@ -487,8 +487,8 @@ class _QuoteBlock extends StatelessWidget {
             children: [
               Container(
                 width: 4,
-                decoration: const BoxDecoration(
-                  color: DuetColors.peach,
+                decoration: BoxDecoration(
+                  color: context.palette.quote,
                   borderRadius: BorderRadius.horizontal(left: Radius.circular(10)),
                 ),
               ),
@@ -501,7 +501,7 @@ class _QuoteBlock extends StatelessWidget {
                     children: [
                       Text(
                         name,
-                        style: const TextStyle(color: DuetColors.peach, fontWeight: FontWeight.w700, fontSize: 12),
+                        style: TextStyle(color: context.palette.quote, fontWeight: FontWeight.w700, fontSize: 12),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -536,13 +536,13 @@ class _ReplyBar extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(10, 4, 10, 0),
       padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
       decoration: BoxDecoration(
-        color: DuetColors.surfaceHigh,
+        color: context.palette.surfaceHigh,
         borderRadius: BorderRadius.circular(14),
-        border: const Border(left: BorderSide(color: DuetColors.pink, width: 4)),
+        border: Border(left: BorderSide(color: context.palette.accent, width: 4)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.reply_rounded, size: 18, color: DuetColors.pink),
+          Icon(Icons.reply_rounded, size: 18, color: context.palette.accent),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -551,7 +551,7 @@ class _ReplyBar extends StatelessWidget {
               children: [
                 Text(
                   'Replying to $name',
-                  style: const TextStyle(color: DuetColors.pink, fontWeight: FontWeight.w700, fontSize: 12),
+                  style: TextStyle(color: context.palette.accent, fontWeight: FontWeight.w700, fontSize: 12),
                 ),
                 Text(body, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: DuetColors.textMuted)),
               ],
@@ -656,14 +656,14 @@ class _Composer extends StatelessWidget {
                   hintText: hint,
                   counterText: '',
                   isDense: true,
-                  fillColor: transparent ? Colors.black.withValues(alpha: 0.45) : DuetColors.surfaceHigh,
+                  fillColor: transparent ? Colors.black.withValues(alpha: 0.45) : context.palette.surfaceHigh,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
                   enabledBorder:
                       OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
-                    borderSide: const BorderSide(color: DuetColors.pink, width: 1.2),
+                    borderSide: BorderSide(color: context.palette.accent, width: 1.2),
                   ),
                 ),
               ),
@@ -677,7 +677,7 @@ class _Composer extends StatelessWidget {
                   duration: const Duration(milliseconds: 150),
                   opacity: enabled ? 1 : 0.5,
                   child: Container(
-                    decoration: const BoxDecoration(shape: BoxShape.circle, gradient: DuetColors.accentGradient),
+                    decoration: BoxDecoration(shape: BoxShape.circle, gradient: context.palette.accentGradient),
                     child: IconButton(
                       onPressed: enabled ? onSend : null,
                       icon: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
@@ -748,8 +748,8 @@ class ChatScreen extends ConsumerWidget {
           ],
         ),
       ),
-      body: const DecoratedBox(
-        decoration: BoxDecoration(gradient: DuetColors.backgroundGradient),
+      body: DecoratedBox(
+        decoration: BoxDecoration(gradient: context.palette.backgroundGradient),
         child: ChatView(),
       ),
     );

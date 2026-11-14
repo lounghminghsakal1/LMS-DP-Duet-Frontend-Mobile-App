@@ -32,6 +32,11 @@ class PairingRepository {
         await _dio.delete<void>('/pair/invites/$inviteId');
       });
 
+  /// Switches the shared theme for both people (general | love | friends).
+  Future<void> setMode(String mode) => guardApi(() async {
+        await _dio.put<void>('/pair/mode', data: {'mode': mode});
+      });
+
   Future<void> unpair() => guardApi(() async {
         await _dio.delete<void>('/pair');
       });

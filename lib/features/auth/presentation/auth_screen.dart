@@ -5,6 +5,7 @@ import '../../../core/config/server_config.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/common.dart';
+import '../../../core/widgets/duet_logo.dart';
 import 'auth_controller.dart';
 import 'server_settings_sheet.dart';
 
@@ -185,8 +186,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                             serverUrl,
                             style: const TextStyle(color: DuetColors.textMuted, fontSize: 12),
                           ),
-                          backgroundColor: DuetColors.surface,
-                          side: const BorderSide(color: DuetColors.outline),
+                          backgroundColor: context.palette.surface,
+                          side: BorderSide(color: context.palette.outline),
                           onPressed: () => showServerSettingsSheet(context),
                         ),
                       ),
@@ -208,23 +209,14 @@ class _Logo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Container(
-        width: 84,
-        height: 84,
+      child: DecoratedBox(
         decoration: BoxDecoration(
-          gradient: DuetColors.accentGradient,
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(26),
           boxShadow: [
-            BoxShadow(color: DuetColors.pink.withValues(alpha: 0.4), blurRadius: 30, offset: const Offset(0, 12)),
+            BoxShadow(color: context.palette.accent.withValues(alpha: 0.35), blurRadius: 32, offset: const Offset(0, 12)),
           ],
         ),
-        child: const Stack(
-          alignment: Alignment.center,
-          children: [
-            Positioned(left: 16, child: Icon(Icons.favorite_rounded, color: Colors.white70, size: 34)),
-            Positioned(right: 16, child: Icon(Icons.favorite_rounded, color: Colors.white, size: 34)),
-          ],
-        ),
+        child: const DuetLogo(size: 96),
       ),
     );
   }
@@ -278,10 +270,10 @@ class _EmojiPicker extends StatelessWidget {
                   height: 44,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: emoji == selected ? DuetColors.pink.withValues(alpha: 0.2) : DuetColors.surfaceHigh,
+                    color: emoji == selected ? context.palette.accent.withValues(alpha: 0.2) : context.palette.surfaceHigh,
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: emoji == selected ? DuetColors.pink : Colors.transparent,
+                      color: emoji == selected ? context.palette.accent : Colors.transparent,
                       width: 1.5,
                     ),
                   ),

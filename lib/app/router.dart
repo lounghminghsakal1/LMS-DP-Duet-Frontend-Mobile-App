@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../core/theme/app_theme.dart';
 import '../core/widgets/common.dart';
+import '../core/widgets/duet_logo.dart';
 import '../features/auth/presentation/auth_controller.dart';
 import '../features/auth/presentation/auth_screen.dart';
 import '../features/chat/presentation/chat_view.dart';
@@ -71,13 +71,13 @@ class _SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       body: DuetBackground(
         child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.favorite_rounded, color: DuetColors.pink, size: 56),
+              const DuetLogo(size: 72),
               SizedBox(height: 18),
               SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4)),
             ],

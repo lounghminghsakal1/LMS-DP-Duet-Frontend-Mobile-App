@@ -51,7 +51,7 @@ class _PairingViewState extends ConsumerState<PairingView> {
       final paired = await ref.read(overviewControllerProvider.notifier).invite(email);
       if (!mounted) return;
       _email.clear();
-      showToast(context, paired ? 'You are paired! 💞' : 'Invite sent to $email', icon: Icons.favorite_rounded);
+      showToast(context, paired ? context.copy.pairedToast : 'Invite sent to $email', icon: Icons.check_circle_rounded);
     });
   }
 
@@ -66,10 +66,10 @@ class _PairingViewState extends ConsumerState<PairingView> {
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         children: [
           const SizedBox(height: 12),
-          const Center(child: Text('💌', style: TextStyle(fontSize: 56))),
+          Center(child: Text(context.copy.pairEmoji, style: const TextStyle(fontSize: 56))),
           const SizedBox(height: 12),
           Text(
-            'Pair with your person',
+            context.copy.pairTitle,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineSmall,
           ),
@@ -166,9 +166,9 @@ class _PairingViewState extends ConsumerState<PairingView> {
               autocorrect: false,
               textInputAction: TextInputAction.send,
               onSubmitted: (_) => _invite(),
-              decoration: const InputDecoration(
-                labelText: "Partner's email",
-                prefixIcon: Icon(Icons.favorite_border_rounded),
+              decoration: InputDecoration(
+                labelText: context.copy.inviteLabel,
+                prefixIcon: Icon(Icons.person_add_alt_rounded),
               ),
             ),
             const SizedBox(height: 14),
@@ -201,9 +201,9 @@ class _IncomingInviteCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         gradient: LinearGradient(
-          colors: [DuetColors.pink.withValues(alpha: 0.18), DuetColors.violet.withValues(alpha: 0.18)],
+          colors: [context.palette.accent.withValues(alpha: 0.18), context.palette.accent2.withValues(alpha: 0.18)],
         ),
-        border: Border.all(color: DuetColors.pink.withValues(alpha: 0.4)),
+        border: Border.all(color: context.palette.accent.withValues(alpha: 0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -238,7 +238,7 @@ class _IncomingInviteCard extends StatelessWidget {
                 child: FilledButton(
                   style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
                   onPressed: busy ? null : onAccept,
-                  child: const Text('Accept 💞'),
+                  child: Text(context.copy.acceptLabel),
                 ),
               ),
             ],

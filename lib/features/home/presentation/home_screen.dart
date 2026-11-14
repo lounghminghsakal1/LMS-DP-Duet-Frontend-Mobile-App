@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/format.dart';
 import '../../../core/widgets/common.dart';
+import '../../../core/widgets/duet_logo.dart';
 import '../../auth/presentation/server_settings_sheet.dart';
 import '../../chat/presentation/chat_controller.dart';
 import '../../history/domain/history_entry.dart';
@@ -16,6 +17,8 @@ import '../../pairing/presentation/pairing_view.dart';
 import '../../player/presentation/watch_flow.dart';
 import '../../session/data/session_socket.dart';
 import '../../session/domain/room_state.dart';
+import '../../../core/theme/app_mode.dart';
+import '../../pairing/presentation/theme_picker_sheet.dart';
 import '../../session/presentation/presence.dart';
 import '../../session/presentation/session_controller.dart';
 import '../../sharing/presentation/share_controller.dart';
@@ -33,15 +36,20 @@ class HomeScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 20,
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.favorite_rounded, color: DuetColors.pink, size: 22),
-            SizedBox(width: 8),
-            Text('Duet', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 22)),
+            const DuetLogo(size: 30),
+            const SizedBox(width: 8),
+            const Text('Duet', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 22)),
           ],
         ),
         actions: [
           if (paired) ...[
+            IconButton(
+              tooltip: 'Theme for both of you',
+              onPressed: () => showThemePicker(context),
+              icon: const Icon(Icons.palette_outlined),
+            ),
             IconButton(
               tooltip: 'History',
               onPressed: () => context.push('/history'),
@@ -142,7 +150,7 @@ class _PairedHome extends ConsumerWidget {
             emoji: '🎬',
             title: 'Movie night',
             subtitle: 'A movie you both have on your phones',
-            gradient: DuetColors.movieGradient,
+            gradient: context.palette.movieGradient,
             onTap: () => WatchFlow.pickAndStart(context, ref, MediaKind.video),
           ),
           const SizedBox(height: 12),
@@ -153,7 +161,7 @@ class _PairedHome extends ConsumerWidget {
                   emoji: '🎵',
                   title: 'Music',
                   subtitle: 'Listen together',
-                  gradient: DuetColors.musicGradient,
+                  gradient: context.palette.musicGradient,
                   compact: true,
                   onTap: () => WatchFlow.pickAndStart(context, ref, MediaKind.audio),
                 ),
@@ -164,7 +172,7 @@ class _PairedHome extends ConsumerWidget {
                   emoji: '▶️',
                   title: 'YouTube',
                   subtitle: 'Paste a link',
-                  gradient: DuetColors.youtubeGradient,
+                  gradient: context.palette.youtubeGradient,
                   compact: true,
                   onTap: () => context.push('/youtube'),
                 ),
@@ -172,8 +180,8 @@ class _PairedHome extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 24),
-          SectionTitle('Love taps for ${partner.displayName}'),
-          _LoveTaps(enabled: session.isConnected),
+          SectionTitle(context.copy.tapsTitle(partner.displayName)),
+          _QuickTaps(enabled: session.isConnected),
           if (continueWatching.isNotEmpty) ...[
             const SizedBox(height: 24),
             SectionTitle(
@@ -225,9 +233,9 @@ class _CoupleHeader extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         gradient: LinearGradient(
-          colors: [DuetColors.pink.withValues(alpha: 0.16), DuetColors.violet.withValues(alpha: 0.16)],
+          colors: [context.palette.accent.withValues(alpha: 0.16), context.palette.accent2.withValues(alpha: 0.16)],
         ),
-        border: Border.all(color: DuetColors.outline),
+        border: Border.all(color: context.palette.outline),
       ),
       child: Row(
         children: [
@@ -249,7 +257,7 @@ class _CoupleHeader extends StatelessWidget {
                 Text('$myName & $partnerName', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 4),
                 Text(
-                  partnerOnline ? '$partnerName is online now 💚' : '$partnerName · $presence',
+                  partnerOnline ? context.copy.onlineLine(partnerName) : '$partnerName · $presence',
                   style: TextStyle(color: partnerOnline ? DuetColors.mint : DuetColors.textMuted, fontSize: 13),
                 ),
               ],
@@ -314,7 +322,7 @@ class _ShareUploadCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.cloud_upload_rounded, color: DuetColors.violet, size: 20),
+                Icon(Icons.cloud_upload_rounded, color: context.palette.accent2, size: 20),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -360,9 +368,9 @@ class _PartnerOfflineBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: DuetColors.surface,
+        color: context.palette.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: DuetColors.outline),
+        border: Border.all(color: context.palette.outline),
       ),
       child: Row(
         children: [
@@ -406,9 +414,9 @@ class _ActiveSessionCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: DuetColors.accentGradient,
+        gradient: context.palette.accentGradient,
         borderRadius: BorderRadius.circular(22),
-        boxShadow: [BoxShadow(color: DuetColors.pink.withValues(alpha: 0.3), blurRadius: 24, offset: const Offset(0, 10))],
+        boxShadow: [BoxShadow(color: context.palette.accent.withValues(alpha: 0.3), blurRadius: 24, offset: const Offset(0, 10))],
       ),
       child: Row(
         children: [
@@ -435,7 +443,7 @@ class _ActiveSessionCard extends StatelessWidget {
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: Colors.white,
-              foregroundColor: DuetColors.pink,
+              foregroundColor: context.palette.accent,
               minimumSize: const Size(84, 44),
             ),
             onPressed: onJoin,
@@ -509,28 +517,23 @@ class _StartCard extends StatelessWidget {
   }
 }
 
-class _LoveTaps extends ConsumerWidget {
-  const _LoveTaps({required this.enabled});
+/// Quick taps that buzz the other phone — wave/ping, hug/kiss or high-five/LOL,
+/// depending on the shared theme.
+class _QuickTaps extends ConsumerWidget {
+  const _QuickTaps({required this.enabled});
 
   final bool enabled;
-
-  static const _taps = [
-    ('hug', '🤗', 'Hug'),
-    ('kiss', '💋', 'Kiss'),
-    ('miss_you', '🥺', 'Miss you'),
-    ('come_watch', '🍿', 'Come watch'),
-  ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Row(
       children: [
-        for (final (kind, emoji, label) in _taps)
+        for (final QuickTap(:kind, :emoji, :label) in context.copy.taps)
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Material(
-                color: DuetColors.surface,
+                color: context.palette.surface,
                 borderRadius: BorderRadius.circular(18),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(18),
@@ -572,7 +575,7 @@ class _ContinueCard extends StatelessWidget {
     return SizedBox(
       width: 200,
       child: Material(
-        color: DuetColors.surface,
+        color: context.palette.surface,
         borderRadius: BorderRadius.circular(18),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -590,13 +593,13 @@ class _ContinueCard extends StatelessWidget {
                       Image.network(
                         'https://i.ytimg.com/vi/${entry.youtubeId}/mqdefault.jpg',
                         fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const DecoratedBox(
-                          decoration: BoxDecoration(gradient: DuetColors.youtubeGradient),
+                        errorBuilder: (_, _, _) => DecoratedBox(
+                          decoration: BoxDecoration(gradient: context.palette.youtubeGradient),
                         ),
                       )
                     else
-                      const DecoratedBox(
-                        decoration: BoxDecoration(gradient: DuetColors.movieGradient),
+                      DecoratedBox(
+                        decoration: BoxDecoration(gradient: context.palette.movieGradient),
                         child: Center(child: Text('🎬', style: TextStyle(fontSize: 30))),
                       ),
                     const Center(child: Icon(Icons.play_circle_fill_rounded, color: Colors.white, size: 36)),
@@ -653,8 +656,8 @@ class _StatsCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               stats.togetherMs > 0
-                  ? '${formatSpan(stats.togetherMs)} spent together on Duet 💞'
-                  : 'Your time together will show up here 💞',
+                  ? context.copy.togetherLine(formatSpan(stats.togetherMs))
+                  : context.copy.togetherEmpty,
               style: const TextStyle(color: DuetColors.textMuted, fontSize: 13),
             ),
             const SizedBox(height: 16),

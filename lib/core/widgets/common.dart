@@ -11,7 +11,7 @@ class DuetBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
-      decoration: const BoxDecoration(gradient: DuetColors.backgroundGradient),
+      decoration: BoxDecoration(gradient: context.palette.backgroundGradient),
       child: child,
     );
   }
@@ -24,13 +24,14 @@ class EmojiAvatar extends StatelessWidget {
     required this.emoji,
     this.size = 44,
     this.online,
-    this.gradient = DuetColors.accentGradient,
+    this.gradient,
   });
 
   final String emoji;
   final double size;
   final bool? online;
-  final Gradient gradient;
+  /// Defaults to the current theme's accent gradient.
+  final Gradient? gradient;
 
   @override
   Widget build(BuildContext context) {
@@ -43,10 +44,10 @@ class EmojiAvatar extends StatelessWidget {
           Container(
             width: size,
             height: size,
-            decoration: BoxDecoration(shape: BoxShape.circle, gradient: gradient),
+            decoration: BoxDecoration(shape: BoxShape.circle, gradient: gradient ?? context.palette.accentGradient),
             padding: const EdgeInsets.all(2),
             child: Container(
-              decoration: const BoxDecoration(shape: BoxShape.circle, color: DuetColors.surfaceHigh),
+              decoration: BoxDecoration(shape: BoxShape.circle, color: context.palette.surfaceHigh),
               alignment: Alignment.center,
               child: Text(emoji, style: TextStyle(fontSize: size * 0.46)),
             ),
@@ -61,7 +62,7 @@ class EmojiAvatar extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: online! ? DuetColors.mint : DuetColors.textFaint,
-                  border: Border.all(color: DuetColors.background, width: 2),
+                  border: Border.all(color: context.palette.background, width: 2),
                 ),
               ),
             ),
@@ -141,14 +142,15 @@ class GradientButton extends StatelessWidget {
     required this.onPressed,
     this.icon,
     this.loading = false,
-    this.gradient = DuetColors.accentGradient,
+    this.gradient,
   });
 
   final String label;
   final VoidCallback? onPressed;
   final IconData? icon;
   final bool loading;
-  final Gradient gradient;
+  /// Defaults to the current theme's accent gradient.
+  final Gradient? gradient;
 
   @override
   Widget build(BuildContext context) {
@@ -157,10 +159,10 @@ class GradientButton extends StatelessWidget {
       opacity: enabled ? 1 : 0.6,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          gradient: gradient,
+          gradient: gradient ?? context.palette.accentGradient,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(color: DuetColors.pink.withValues(alpha: 0.25), blurRadius: 18, offset: const Offset(0, 8)),
+            BoxShadow(color: context.palette.accent.withValues(alpha: 0.25), blurRadius: 18, offset: const Offset(0, 8)),
           ],
         ),
         child: Material(
@@ -210,7 +212,7 @@ void showToast(BuildContext context, String message, {IconData? icon}) {
         content: Row(
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 18, color: DuetColors.pink),
+              Icon(icon, size: 18, color: context.palette.accent),
               const SizedBox(width: 10),
             ],
             Expanded(child: Text(message)),
@@ -242,7 +244,7 @@ Future<bool> confirmDialog(
           onPressed: () => Navigator.of(context).pop(true),
           child: Text(
             confirmLabel,
-            style: TextStyle(color: destructive ? DuetColors.danger : DuetColors.pink, fontWeight: FontWeight.w700),
+            style: TextStyle(color: destructive ? DuetColors.danger : context.palette.accent, fontWeight: FontWeight.w700),
           ),
         ),
       ],

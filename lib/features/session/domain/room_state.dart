@@ -1,3 +1,5 @@
+import '../../../core/theme/app_mode.dart';
+
 enum MediaKind {
   video,
   audio,
@@ -219,7 +221,11 @@ class RoomState {
     required this.members,
     required this.serverTime,
     this.share,
+    this.mode = AppMode.general,
   });
+
+  /// The pair's shared theme.
+  final AppMode mode;
 
   final String coupleId;
   final RoomMedia? media;
@@ -253,12 +259,14 @@ class RoomState {
         members: members,
         serverTime: serverTime,
         share: share,
+        mode: mode,
       );
 
   factory RoomState.fromJson(Map<String, dynamic> json) => RoomState(
         coupleId: json['coupleId'] as String,
         media: json['media'] == null ? null : RoomMedia.fromJson(json['media'] as Map<String, dynamic>),
         share: RoomShare.fromJson(json['share']),
+        mode: AppMode.parse(json['mode'] as String?),
         playback: PlaybackState.fromJson(json['playback'] as Map<String, dynamic>),
         members: [
           for (final m in (json['members'] as List? ?? const [])) RoomMember.fromJson(m as Map<String, dynamic>),
@@ -282,10 +290,14 @@ class RoomEvent {
     this.buffering,
     this.matched,
     this.shareId,
+    this.mode,
   });
 
   final String kind;
   final String? shareId;
+
+  /// For mode_changed: the new theme.
+  final String? mode;
   final String? by;
   final String? userId;
   final String? reason;
@@ -315,5 +327,6 @@ class RoomEvent {
         buffering: json['buffering'] as bool?,
         matched: json['matched'] as bool?,
         shareId: json['shareId'] as String?,
+        mode: json['mode'] as String?,
       );
 }

@@ -10,6 +10,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:duet/core/config/server_config.dart';
+import 'package:duet/core/theme/app_mode.dart';
 import 'package:duet/features/library/domain/fingerprint.dart';
 import 'package:duet/features/session/data/session_client.dart';
 import 'package:duet/features/session/domain/room_state.dart';
@@ -172,6 +173,15 @@ void main() {
         sam.client.sendChat(text: 'same 🥹', clientId: 'reply-$stamp', replyToId: message.message.id);
         final reply = (await replyArrived.timeout(const Duration(seconds: 5))) as ChatMessageReceived;
         expect(reply.message.replyTo!.body, 'this scene 😍');
+
+        // ---- shared theme: one phone switches it, the other follows live
+        expect(sam.client.room!.mode, AppMode.general);
+        await api('PUT', '/pair/mode', token: tokenA, body: {'mode': 'friends'});
+        await waitFor(() => sam.client.room?.mode == AppMode.friends, 'sam got the friends theme');
+        await api('PUT', '/pair/mode', token: tokenB, body: {'mode': 'love'});
+        await waitFor(() => alex.client.room?.mode == AppMode.love, 'alex got the love theme');
+        final me = await api('GET', '/me', token: tokenB);
+        expect(me['mode'], 'love');
 
         // ---- partner leaves the player → "continue watching" alone
         sam.client.markUnready();

@@ -9,7 +9,10 @@ import '../../auth/data/auth_repository.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../auth/presentation/auth_screen.dart' show kAvatarEmojis;
 import '../../auth/presentation/server_settings_sheet.dart';
+import '../../../core/widgets/duet_logo.dart';
+import '../../pairing/presentation/app_icon_controller.dart';
 import '../../pairing/presentation/overview_controller.dart';
+import '../../pairing/presentation/theme_picker_sheet.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -49,7 +52,7 @@ class ProfileScreen extends ConsumerWidget {
                   width: 52,
                   height: 52,
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(color: DuetColors.surfaceHigh, borderRadius: BorderRadius.circular(14)),
+                  decoration: BoxDecoration(color: context.palette.surfaceHigh, borderRadius: BorderRadius.circular(14)),
                   child: Text(e, style: const TextStyle(fontSize: 26)),
                 ),
               ),
@@ -96,7 +99,7 @@ class ProfileScreen extends ConsumerWidget {
                       bottom: 0,
                       child: Container(
                         padding: const EdgeInsets.all(6),
-                        decoration: const BoxDecoration(shape: BoxShape.circle, color: DuetColors.pink),
+                        decoration: BoxDecoration(shape: BoxShape.circle, color: context.palette.accent),
                         child: const Icon(Icons.edit_rounded, size: 14, color: Colors.white),
                       ),
                     ),
@@ -141,7 +144,27 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                     const Divider(height: 1),
                     ListTile(
-                      leading: const Icon(Icons.heart_broken_rounded, color: DuetColors.danger),
+                      leading: Icon(Icons.palette_outlined, color: context.palette.accent),
+                      title: const Text('Theme for both of you'),
+                      subtitle: Text('${context.copy.label} ${context.copy.emoji}'),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => showThemePicker(context),
+                    ),
+                    if (AppIconController.isSupported) ...[
+                      const Divider(height: 1),
+                      SwitchListTile(
+                        secondary: const DuetLogo(size: 32),
+                        title: const Text('App icon follows the theme'),
+                        subtitle: const Text(
+                          'Changes when you leave the app. Some launchers move the shortcut back to the app drawer.',
+                        ),
+                        value: ref.watch(appIconControllerProvider),
+                        onChanged: (value) => ref.read(appIconControllerProvider.notifier).setFollowTheme(value),
+                      ),
+                    ],
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.link_off_rounded, color: DuetColors.danger),
                       title: const Text('Unpair', style: TextStyle(color: DuetColors.danger)),
                       subtitle: const Text('Also deletes your shared chat history'),
                       onTap: () async {

@@ -6,8 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/theme/app_mode.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/format.dart';
+import '../features/pairing/presentation/app_icon_controller.dart';
+import '../features/pairing/presentation/mode_controller.dart';
 import '../features/chat/presentation/chat_controller.dart';
 import '../features/sharing/presentation/share_controller.dart';
 import '../features/session/data/session_client.dart';
@@ -25,13 +28,19 @@ class DuetApp extends ConsumerWidget {
     // Keep the realtime connection and chat alive for the whole app.
     ref.watch(sessionControllerProvider.select((s) => s.connection));
     ref.listen(chatControllerProvider.select((c) => c.unread), (_, _) {});
+    // General / Love / Friends — shared by both people; animates when it changes.
+    final theme = buildDuetTheme(DuetPalette.of(ref.watch(modeControllerProvider)));
+    // Android: the home-screen icon follows the theme (applied when leaving the app).
+    ref.watch(appIconControllerProvider);
 
     return MaterialApp.router(
       title: 'Duet',
       debugShowCheckedModeBanner: false,
-      theme: buildDuetTheme(),
-      darkTheme: buildDuetTheme(),
+      theme: theme,
+      darkTheme: theme,
       themeMode: ThemeMode.dark,
+      themeAnimationDuration: const Duration(milliseconds: 550),
+      themeAnimationCurve: Curves.easeInOut,
       scaffoldMessengerKey: scaffoldMessengerKey,
       routerConfig: router,
       builder: (context, child) => _GlobalSessionListener(router: router, child: child ?? const SizedBox()),
@@ -39,7 +48,7 @@ class DuetApp extends ConsumerWidget {
   }
 }
 
-/// App-wide reactions to realtime events: love taps (with a heart burst) and
+/// App-wide reactions to realtime events: quick taps (with a themed burst), theme changes and
 /// "your partner started something — join?" wherever you are in the app.
 class _GlobalSessionListener extends ConsumerStatefulWidget {
   const _GlobalSessionListener({required this.router, required this.child});
@@ -85,7 +94,7 @@ class _GlobalSessionListenerState extends ConsumerState<_GlobalSessionListener> 
     } else if (_announcedOffline) {
       _announcedOffline = false;
       final partner = ref.read(sessionControllerProvider).partner;
-      if (_currentPath != '/watch') _snack('💚  ${partner?.displayName ?? 'Your partner'} is back online');
+      if (_currentPath != '/watch') _snack('🟢  ${partner?.displayName ?? 'Your partner'} is back online');
     }
   }
 
@@ -104,15 +113,12 @@ class _GlobalSessionListenerState extends ConsumerState<_GlobalSessionListener> 
       case NudgeReceived(:final kind):
         HapticFeedback.heavyImpact();
         Future<void>.delayed(const Duration(milliseconds: 180), HapticFeedback.heavyImpact);
-        final (emoji, text) = switch (kind) {
-          'hug' => ('🤗', '$partnerName sent you a hug'),
-          'kiss' => ('💋', '$partnerName sent you a kiss'),
-          'miss_you' => ('🥺', '$partnerName misses you'),
-          'come_watch' => ('🍿', '$partnerName says: come watch with me!'),
-          _ => ('💞', '$partnerName is thinking of you'),
-        };
+        final (emoji, text) = ModeCopy.nudgeMessage(kind, partnerName);
         _burst();
         _snack('$emoji  $text', action: kind == 'come_watch' && session.media != null ? _joinAction() : null);
+      case RoomEventReceived(:final event) when event.kind == 'mode_changed' && event.by != session.myUserId:
+        final copy = ModeCopy(AppMode.parse(event.mode));
+        _snack('🎨  $partnerName switched the theme to ${copy.label} ${copy.emoji}');
       case RoomEventReceived(:final event, :final room)
           when event.kind == 'media_loaded' && event.by != session.myUserId:
         final path = _currentPath;
@@ -180,7 +186,7 @@ class _GlobalSessionListenerState extends ConsumerState<_GlobalSessionListener> 
 
   SnackBarAction _joinAction() => SnackBarAction(
         label: 'JOIN',
-        textColor: DuetColors.pink,
+        textColor: context.palette.accent,
         onPressed: () => widget.router.push('/join'),
       );
 
@@ -220,7 +226,7 @@ class _GlobalSessionListenerState extends ConsumerState<_GlobalSessionListener> 
   }
 }
 
-/// A ring of hearts bursting from the middle of the screen.
+/// A ring of themed emoji (hearts / sparkles / confetti) bursting from the middle of the screen.
 class _HeartBurst extends StatefulWidget {
   const _HeartBurst({super.key});
 
@@ -258,7 +264,7 @@ class _HeartBurstState extends State<_HeartBurst> with SingleTickerProviderState
                 opacity: fade,
                 child: Transform.scale(
                   scale: 0.6 + t * 0.8,
-                  child: const Icon(Icons.favorite_rounded, color: DuetColors.pink, size: 90),
+                  child: Icon(context.copy.burstIcon, color: context.palette.accent, size: 90),
                 ),
               ),
               for (final (angle, distance, size) in _hearts)
@@ -266,7 +272,7 @@ class _HeartBurstState extends State<_HeartBurst> with SingleTickerProviderState
                   offset: Offset(math.cos(angle) * distance * t, math.sin(angle) * distance * t),
                   child: Opacity(
                     opacity: fade,
-                    child: Text('💗', style: TextStyle(fontSize: size)),
+                    child: Text(context.copy.burstEmoji, style: TextStyle(fontSize: size)),
                   ),
                 ),
             ],

@@ -53,7 +53,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
               child: Text(
-                stats.togetherMs > 0 ? '${formatSpan(stats.togetherMs)} together so far 💞' : 'Saved on this phone only',
+                stats.togetherMs > 0 ? context.copy.togetherLine(formatSpan(stats.togetherMs)) : 'Saved on this phone only',
                 style: const TextStyle(color: DuetColors.textMuted),
               ),
             ),
@@ -113,9 +113,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         label: Text(label),
         selected: selected,
         onSelected: (_) => setState(() => _filter = kind),
-        selectedColor: DuetColors.pink.withValues(alpha: 0.25),
-        backgroundColor: DuetColors.surface,
-        side: BorderSide(color: selected ? DuetColors.pink : DuetColors.outline),
+        selectedColor: context.palette.accent.withValues(alpha: 0.25),
+        backgroundColor: context.palette.surface,
+        side: BorderSide(color: selected ? context.palette.accent : context.palette.outline),
       ),
     );
   }
@@ -141,7 +141,7 @@ class _HistoryTile extends StatelessWidget {
     ].join(' · ');
 
     return Material(
-      color: DuetColors.surface,
+      color: context.palette.surface,
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
@@ -157,9 +157,9 @@ class _HistoryTile extends StatelessWidget {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
                   gradient: switch (entry.kind) {
-                    MediaKind.video => DuetColors.movieGradient,
-                    MediaKind.audio => DuetColors.musicGradient,
-                    MediaKind.youtube => DuetColors.youtubeGradient,
+                    MediaKind.video => context.palette.movieGradient,
+                    MediaKind.audio => context.palette.musicGradient,
+                    MediaKind.youtube => context.palette.youtubeGradient,
                   },
                 ),
                 child: Text(entry.kind.emoji, style: const TextStyle(fontSize: 22)),
@@ -185,7 +185,7 @@ class _HistoryTile extends StatelessWidget {
               const SizedBox(width: 8),
               Icon(
                 entry.finished ? Icons.replay_rounded : Icons.play_arrow_rounded,
-                color: DuetColors.pink,
+                color: context.palette.accent,
               ),
             ],
           ),

@@ -181,8 +181,8 @@ class _PlayButton extends StatelessWidget {
           height: 64,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: DuetColors.accentGradient,
-            boxShadow: [BoxShadow(color: DuetColors.pink.withValues(alpha: 0.45), blurRadius: 20)],
+            gradient: context.palette.accentGradient,
+            boxShadow: [BoxShadow(color: context.palette.accent.withValues(alpha: 0.45), blurRadius: 20)],
           ),
           child: pending
               ? const Padding(
@@ -230,7 +230,7 @@ class _SpeedButton extends StatelessWidget {
       enabled: onRate != null,
       tooltip: 'Speed (for both)',
       onSelected: onRate,
-      color: DuetColors.surfaceHigh,
+      color: context.palette.surfaceHigh,
       itemBuilder: (context) => [
         for (final r in _rates)
           PopupMenuItem(
@@ -243,7 +243,7 @@ class _SpeedButton extends StatelessWidget {
         child: Text(
           _label(rate),
           style: TextStyle(
-            color: rate == 1 ? Colors.white70 : DuetColors.pink,
+            color: rate == 1 ? Colors.white70 : context.palette.accent,
             fontWeight: FontWeight.w700,
             fontSize: 12,
           ),
@@ -303,7 +303,7 @@ class _SpinningDiscState extends State<SpinningDisc> with SingleTickerProviderSt
           gradient: const SweepGradient(
             colors: [Color(0xFF1B1530), Color(0xFF2A2048), Color(0xFF1B1530), Color(0xFF2A2048), Color(0xFF1B1530)],
           ),
-          boxShadow: [BoxShadow(color: DuetColors.violet.withValues(alpha: 0.35), blurRadius: 40, spreadRadius: 2)],
+          boxShadow: [BoxShadow(color: context.palette.accent2.withValues(alpha: 0.35), blurRadius: 40, spreadRadius: 2)],
         ),
         child: Stack(
           alignment: Alignment.center,
@@ -320,8 +320,8 @@ class _SpinningDiscState extends State<SpinningDisc> with SingleTickerProviderSt
             Container(
               width: size * 0.36,
               height: size * 0.36,
-              decoration: const BoxDecoration(shape: BoxShape.circle, gradient: DuetColors.accentGradient),
-              child: const Icon(Icons.favorite_rounded, color: Colors.white, size: 30),
+              decoration: BoxDecoration(shape: BoxShape.circle, gradient: context.palette.accentGradient),
+              child: Icon(context.copy.discIcon, color: Colors.white, size: 30),
             ),
           ],
         ),

@@ -540,7 +540,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
       case 'play_solo' when byPartner:
         return '▶  $partnerName kept watching — catching you up';
       case 'auto_resume':
-        return '💞  Back together — resuming';
+        return context.copy.backTogether;
       case 'presence' when byPartner:
         return event.online == true ? '$partnerName is back online' : '$partnerName went offline';
       default:
@@ -631,7 +631,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
 
   Widget _buildPortrait(SessionSnapshot snapshot) {
     return DecoratedBox(
-      decoration: const BoxDecoration(gradient: DuetColors.backgroundGradient),
+      decoration: BoxDecoration(gradient: context.palette.backgroundGradient),
       child: SafeArea(
         child: Column(
           children: [
@@ -663,7 +663,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
         AnimatedContainer(
           duration: const Duration(milliseconds: 220),
           width: _chatOverlayOpen ? 340 : 0,
-          color: DuetColors.background.withValues(alpha: 0.96),
+          color: context.palette.background.withValues(alpha: 0.96),
           child: _chatOverlayOpen
               ? SafeArea(
                   left: false,
@@ -786,7 +786,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
                               onPressed: _loadSubtitles,
                               icon: Icon(
                                 _subtitlesLoaded ? Icons.closed_caption_rounded : Icons.closed_caption_off_rounded,
-                                color: _subtitlesLoaded ? DuetColors.pink : Colors.white70,
+                                color: _subtitlesLoaded ? context.palette.accent : Colors.white70,
                                 size: 20,
                               ),
                             ),
@@ -919,19 +919,19 @@ class _StatusStrip extends StatelessWidget {
         ('${p.displayName} is offline · ${presenceText(p)}', DuetColors.textFaint, Icons.cloud_off_rounded),
       final p when iAmUploading => (
           'Sharing with ${p.displayName} · ${(share.progress * 100).floor()}%',
-          DuetColors.violet,
+          context.palette.accent2,
           Icons.cloud_upload_rounded,
         ),
       final p when uploading && !p.ready => (
           '${p.displayName} will stream it after the upload · ${(share.progress * 100).floor()}%',
-          DuetColors.violet,
+          context.palette.accent2,
           Icons.cloud_upload_rounded,
         ),
       final p when p.buffering => ('${p.displayName} is buffering…', DuetColors.amber, Icons.hourglass_top_rounded),
       final p when !p.ready => ('${p.displayName} is getting ready…', DuetColors.amber, Icons.downloading_rounded),
       final p when p.matched == false => ('${p.displayName} has a different file', DuetColors.amber, Icons.warning_rounded),
-      final p when p.streaming => ('Watching with ${p.displayName} (streaming)', DuetColors.mint, Icons.favorite_rounded),
-      final p => ('Watching with ${p.displayName}', DuetColors.mint, Icons.favorite_rounded),
+      final p when p.streaming => ('Watching with ${p.displayName} (streaming)', DuetColors.mint, Icons.people_alt_rounded),
+      final p => ('Watching with ${p.displayName}', DuetColors.mint, Icons.people_alt_rounded),
     };
 
     return Padding(
@@ -981,7 +981,7 @@ class _PartnerLeftModal extends StatelessWidget {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 380),
               child: Material(
-                color: DuetColors.surface,
+                color: context.palette.surface,
                 borderRadius: BorderRadius.circular(26),
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(22, 26, 22, 18),
@@ -1102,11 +1102,11 @@ class _CountdownBadge extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
               decoration: BoxDecoration(
-                gradient: DuetColors.accentGradient,
+                gradient: context.palette.accentGradient,
                 borderRadius: BorderRadius.circular(99),
               ),
-              child: const Text(
-                '💞  Starting together…',
+              child: Text(
+                context.copy.startingTogether,
                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
               ),
             ),
@@ -1138,9 +1138,9 @@ class _BannerView extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
-                      color: DuetColors.surfaceHigh.withValues(alpha: 0.95),
+                      color: context.palette.surfaceHigh.withValues(alpha: 0.95),
                       borderRadius: BorderRadius.circular(99),
-                      border: Border.all(color: DuetColors.outline),
+                      border: Border.all(color: context.palette.outline),
                     ),
                     child: Text(text!, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                   ),

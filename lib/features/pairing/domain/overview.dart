@@ -1,3 +1,4 @@
+import '../../../core/theme/app_mode.dart';
 import '../../auth/domain/app_user.dart';
 
 class PairInvite {
@@ -20,7 +21,10 @@ class PairInvite {
 
 /// Everything the home screen needs: me, my partner, pending invites.
 class Overview {
-  const Overview({required this.user, this.partner, this.incoming = const [], this.outgoing});
+  const Overview({required this.user, this.partner, this.incoming = const [], this.outgoing, this.mode});
+
+  /// The pair's shared theme (null when not paired).
+  final AppMode? mode;
 
   final AppUser user;
   final AppUser? partner;
@@ -38,6 +42,7 @@ class Overview {
         for (final i in (invites['incoming'] as List? ?? const [])) PairInvite.fromJson(i as Map<String, dynamic>),
       ],
       outgoing: invites['outgoing'] == null ? null : PairInvite.fromJson(invites['outgoing'] as Map<String, dynamic>),
+      mode: json['mode'] == null ? null : AppMode.parse(json['mode'] as String),
     );
   }
 }

@@ -123,7 +123,7 @@ class _YoutubeEntryScreenState extends ConsumerState<YoutubeEntryScreen> {
                   child: Image.network(
                     'https://i.ytimg.com/vi/$_videoId/hqdefault.jpg',
                     fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const ColoredBox(color: DuetColors.surfaceHigh),
+                    errorBuilder: (_, _, _) => ColoredBox(color: context.palette.surfaceHigh),
                   ),
                 ),
               ),
@@ -139,7 +139,7 @@ class _YoutubeEntryScreenState extends ConsumerState<YoutubeEntryScreen> {
               GradientButton(
                 label: 'Watch together',
                 icon: Icons.play_arrow_rounded,
-                gradient: DuetColors.youtubeGradient,
+                gradient: context.palette.youtubeGradient,
                 onPressed: _start,
               ),
             ] else

@@ -101,3 +101,23 @@ lib/
   if you only use an https server.
 * Songs keep playing while the screen is off as long as Android keeps the app alive. There's no
   lock-screen media notification yet.
+
+## Logo & app icons
+
+The logo is drawn in code (`lib/core/widgets/duet_logo.dart`): two overlapping shapes (two
+people) with a play button. There's one version per theme: **General** (blue circles), **Love**
+(a heart) and **Friends** (tangerine and teal circles with a spark). The same painter draws the
+in-app logo and renders the launcher icons:
+
+```bash
+flutter test tool/generate_app_icons_test.dart
+```
+
+This regenerates the Android legacy, adaptive and themed (monochrome) icons for all three themes,
+the iOS icon set (General, opaque), and `branding/*.png` (1024 px logos plus a preview sheet).
+
+**Icon follows the theme (Android).** `AndroidManifest.xml` declares three launcher aliases
+(`.LauncherGeneral`, `.LauncherLove`, `.LauncherFriends`). `MainActivity.kt` enables the one
+matching the shared theme when you leave the app. You can turn this off in Profile → "App icon
+follows the theme", which keeps the General icon. Some launchers drop a pinned home-screen shortcut
+when the icon changes; the app stays in the app drawer. iOS keeps the General icon.

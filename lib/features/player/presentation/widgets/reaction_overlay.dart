@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_theme.dart';
+
 /// Emoji reactions that float up over the player on both phones.
 class ReactionOverlay extends StatefulWidget {
   const ReactionOverlay({super.key});
@@ -101,8 +103,7 @@ class _Particle {
   final int delay;
 }
 
-const kReactionEmojis = ['❤️', '😂', '😮', '😢', '🔥', '👏', '🥰'];
-
+/// Row of reaction emoji; the set comes from the shared theme (`context.copy.reactions`).
 class ReactionBar extends StatelessWidget {
   const ReactionBar({super.key, required this.onReact, this.dense = false});
 
@@ -114,7 +115,7 @@ class ReactionBar extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        for (final emoji in kReactionEmojis)
+        for (final emoji in context.copy.reactions)
           InkResponse(
             radius: 22,
             onTap: () => onReact(emoji),

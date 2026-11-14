@@ -134,9 +134,9 @@ class _MediaPickerScreenState extends ConsumerState<MediaPickerScreen> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: DuetColors.violet.withValues(alpha: 0.14),
+                        color: context.palette.accent2.withValues(alpha: 0.14),
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: DuetColors.violet.withValues(alpha: 0.4)),
+                        border: Border.all(color: context.palette.accent2.withValues(alpha: 0.4)),
                       ),
                       child: Text(widget.hint!, style: const TextStyle(fontWeight: FontWeight.w600)),
                     ),
@@ -242,7 +242,7 @@ class _AssetTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = asset.title ?? 'Untitled';
     return Material(
-      color: DuetColors.surface,
+      color: context.palette.surface,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -257,15 +257,15 @@ class _AssetTile extends StatelessWidget {
                   width: isAudio ? 52 : 96,
                   height: 54,
                   child: isAudio
-                      ? const DecoratedBox(
-                          decoration: BoxDecoration(gradient: DuetColors.musicGradient),
+                      ? DecoratedBox(
+                          decoration: BoxDecoration(gradient: context.palette.musicGradient),
                           child: Icon(Icons.music_note_rounded, color: Colors.white),
                         )
                       : FutureBuilder<Uint8List?>(
                           future: thumbnail,
                           builder: (context, snap) => snap.data == null
-                              ? const ColoredBox(
-                                  color: DuetColors.surfaceHigh,
+                              ? ColoredBox(
+                                  color: context.palette.surfaceHigh,
                                   child: Icon(Icons.movie_rounded, color: DuetColors.textFaint),
                                 )
                               : Image.memory(snap.data!, fit: BoxFit.cover, gaplessPlayback: true),
