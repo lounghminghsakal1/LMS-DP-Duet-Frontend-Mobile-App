@@ -36,11 +36,12 @@ String normalizeServerUrl(String input) {
   return _clean(input);
 }
 
-/// http://host:port -> ws://host:port/ws  (https -> wss)
+/// http://host:port -> ws://host:port/api/ws  (https -> wss).
+/// Everything is under /api so a reverse proxy needs a single rule.
 Uri webSocketUriFor(String httpBase) {
   final uri = Uri.parse(httpBase);
   final basePath = uri.path.endsWith('/') ? uri.path.substring(0, uri.path.length - 1) : uri.path;
-  return uri.replace(scheme: uri.scheme == 'https' ? 'wss' : 'ws', path: '$basePath/ws');
+  return uri.replace(scheme: uri.scheme == 'https' ? 'wss' : 'ws', path: '$basePath/api/ws');
 }
 
 /// The server URL is editable from the sign-in screen so both phones can point

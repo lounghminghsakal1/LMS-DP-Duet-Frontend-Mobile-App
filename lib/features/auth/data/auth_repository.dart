@@ -57,7 +57,7 @@ class AuthRepository {
   static Future<bool> checkServer(String baseUrl) async {
     final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 5), receiveTimeout: const Duration(seconds: 5)));
     try {
-      final res = await dio.get<Map<String, dynamic>>('$baseUrl/health');
+      final res = await dio.get<Map<String, dynamic>>('$baseUrl/api/health');
       return res.data?['ok'] == true;
     } catch (_) {
       return false;

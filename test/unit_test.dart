@@ -188,9 +188,10 @@ void main() {
 
     test('server urls', () {
       expect(normalizeServerUrl('192.168.1.26:4747/'), 'http://192.168.1.26:4747');
-      expect(webSocketUriFor('http://192.168.1.26:4747').toString(), 'ws://192.168.1.26:4747/ws');
-      expect(webSocketUriFor('https://duet.example.com').toString(), 'wss://duet.example.com/ws');
-      expect(webSocketUriFor('https://example.com/duet').toString(), 'wss://example.com/duet/ws');
+      expect(webSocketUriFor('http://192.168.1.26:4747').toString(), 'ws://192.168.1.26:4747/api/ws');
+      expect(webSocketUriFor('http://13.200.10.5').toString(), 'ws://13.200.10.5/api/ws');
+      expect(webSocketUriFor('https://duet.example.com').toString(), 'wss://duet.example.com/api/ws');
+      expect(webSocketUriFor('https://example.com/duet').toString(), 'wss://example.com/duet/api/ws');
     });
 
     test('playback position math', () {
