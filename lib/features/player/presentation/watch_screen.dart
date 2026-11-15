@@ -48,6 +48,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
   StreamSubscription<String>? _streamErrorSub;
   bool _refreshingStream = false;
   DateTime? _lastStreamRefresh;
+  int _streamRefreshes = 0;
   MediaKitSyncPlayer? _mediaKit;
   YoutubeSyncPlayer? _youtube;
   late final SyncEngine _engine;
@@ -167,6 +168,14 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
     if (shareId == null || mediaKit == null || _refreshingStream || _leaving) return;
     final now = DateTime.now();
     if (_lastStreamRefresh != null && now.difference(_lastStreamRefresh!) < const Duration(seconds: 20)) return;
+    // Don't loop forever on a stream that's gone: say so after a few tries.
+    if (_streamRefreshes >= 3) {
+      if (mounted && _openError == null) {
+        setState(() => _openError = 'The shared stream stopped working. Go back and ask for it again.');
+      }
+      return;
+    }
+    _streamRefreshes++;
     _refreshingStream = true;
     _lastStreamRefresh = now;
     try {
@@ -175,7 +184,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
       await mediaKit.open(link.url, start: Duration(milliseconds: _engine.expectedPositionMs()));
       _engine.playerReady();
     } catch (_) {
-      if (mounted) _showBanner('The shared stream is no longer available');
+      if (mounted) setState(() => _openError = 'The shared copy is no longer available.');
     } finally {
       _refreshingStream = false;
     }
@@ -332,6 +341,22 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
   Future<void> _play({bool solo = false}) async {
     if (!_requireConnection()) return;
     final snapshot = ref.read(sessionControllerProvider);
+    final share = snapshot.share;
+    final partner = snapshot.partner;
+    // A shared movie starts for both automatically once the partner has it open.
+    if (!solo && share != null && partner != null && !partner.ready) {
+      final firstName = partner.displayName.split(' ').first;
+      final status = share.isReady ? 'is opening it' : 'is getting it (${(share.progress * 100).floor()}%)';
+      final startAlone = await confirmDialog(
+        context,
+        title: 'It starts together',
+        message: '$firstName $status. As soon as $firstName is ready it starts for both of you at the same moment.',
+        confirmLabel: 'Start alone',
+        cancelLabel: 'Wait together',
+      );
+      if (!startAlone || !mounted) return;
+      solo = true;
+    }
     final waiting = (snapshot.room?.waitingFor ?? const []).where((m) => m.userId != snapshot.myUserId).toList();
     if (waiting.isNotEmpty && !solo) {
       final names = waiting.map((m) => m.displayName).join(' & ');
@@ -541,6 +566,8 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
         return '▶  $partnerName kept watching — catching you up';
       case 'auto_resume':
         return context.copy.backTogether;
+      case 'start_together':
+        return '🎬  You\'re both ready, starting together';
       case 'presence' when byPartner:
         return event.online == true ? '$partnerName is back online' : '$partnerName went offline';
       default:
@@ -734,6 +761,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
           if (_openError != null) _ErrorPane(message: _openError!),
           if (!_player.isReady && _openError == null) const Center(child: CircularProgressIndicator()),
           _WaitingOverlay(snapshot: snapshot, engine: _engine, onNudge: () => _client?.nudge('come_watch')),
+          _SharePanel(snapshot: snapshot),
           AnimatedOpacity(
             duration: const Duration(milliseconds: 200),
             opacity: _controlsVisible ? 1 : 0,
@@ -859,6 +887,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
               const Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()),
           ],
         ),
+        _SharePanel(snapshot: snapshot),
         _CountdownBadge(engine: _engine, serverNow: _session.serverNow),
         _BannerView(text: _banner),
       ],
@@ -1060,7 +1089,8 @@ class _WaitingOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final waiting = (snapshot.room?.waitingFor ?? const []).where((m) => m.userId != snapshot.myUserId).toList();
-    if (waiting.isEmpty || engine.targetPlaying) return const SizedBox.shrink();
+    // While a movie is being shared, the share panel shows progress instead.
+    if (waiting.isEmpty || engine.targetPlaying || snapshot.share != null) return const SizedBox.shrink();
     final name = waiting.first.displayName;
     return Align(
       alignment: Alignment.center,
@@ -1080,19 +1110,41 @@ class _WaitingOverlay extends StatelessWidget {
   }
 }
 
-/// "Starting together…" during the scheduled-start lead time.
-class _CountdownBadge extends StatelessWidget {
+/// "Starting together… 3 · 2 · 1" during the scheduled-start lead time.
+class _CountdownBadge extends StatefulWidget {
   const _CountdownBadge({required this.engine, required this.serverNow});
 
   final SyncEngine engine;
   final int Function() serverNow;
 
   @override
+  State<_CountdownBadge> createState() => _CountdownBadgeState();
+}
+
+class _CountdownBadgeState extends State<_CountdownBadge> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) {
+      if (mounted && widget.engine.scheduledStart.value != null) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<int?>(
-      valueListenable: engine.scheduledStart,
+      valueListenable: widget.engine.scheduledStart,
       builder: (context, startsAt, _) {
         if (startsAt == null) return const SizedBox.shrink();
+        final seconds = ((startsAt - widget.serverNow()) / 1000).ceil();
         return Align(
           alignment: Alignment.center,
           child: TweenAnimationBuilder<double>(
@@ -1100,19 +1152,124 @@ class _CountdownBadge extends StatelessWidget {
             duration: const Duration(milliseconds: 300),
             builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              padding: const EdgeInsets.fromLTRB(10, 8, 18, 8),
               decoration: BoxDecoration(
                 gradient: context.palette.accentGradient,
                 borderRadius: BorderRadius.circular(99),
               ),
-              child: Text(
-                context.copy.startingTogether,
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (seconds >= 1)
+                    Container(
+                      width: 30,
+                      height: 30,
+                      margin: const EdgeInsets.only(right: 10),
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+                      child: Text(
+                        '$seconds',
+                        style: TextStyle(color: context.palette.accent, fontWeight: FontWeight.w900, fontSize: 16),
+                      ),
+                    ),
+                  Text(
+                    context.copy.startingTogether,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                  ),
+                ],
               ),
             ),
           ),
         );
       },
+    );
+  }
+}
+
+/// While a movie is being shared: upload progress for both of you, and the
+/// promise that it starts together once both phones are ready.
+class _SharePanel extends ConsumerWidget {
+  const _SharePanel({required this.snapshot});
+
+  final SessionSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final share = snapshot.share;
+    final partner = snapshot.partner;
+    final room = snapshot.room;
+    if (share == null || partner == null || room == null || room.playback.playing) return const SizedBox.shrink();
+    if (partner.ready && (snapshot.me?.ready ?? false)) return const SizedBox.shrink();
+
+    final firstName = partner.displayName.split(' ').first;
+    final iAmUploader = share.uploaderId == snapshot.myUserId;
+    final upload = ref.watch(shareControllerProvider);
+    final mine = iAmUploader && upload.shareId == share.id && upload.isBusy;
+    final progress = share.isReady ? 1.0 : (mine ? upload.progress : share.progress);
+    final title = switch ((iAmUploader, share.isReady)) {
+      (true, false) => 'Sending it to $firstName',
+      (true, true) => 'Sent! Waiting for $firstName to open it…',
+      (false, false) => '$firstName is sending it to you',
+      (false, true) => 'Opening the shared copy…',
+    };
+    final details = [
+      if (!share.isReady) '${(progress * 100).floor()}%',
+      if (!share.isReady) '${formatBytes((share.sizeBytes * progress).round())} of ${formatBytes(share.sizeBytes)}',
+      if (mine && upload.bytesPerSecond > 0) '${formatBytes(upload.bytesPerSecond.round())}/s',
+      if (mine && upload.timeLeft != null)
+        upload.timeLeft!.inSeconds < 60 ? 'under a minute left' : '${formatSpan(upload.timeLeft!.inMilliseconds)} left',
+    ].join(' · ');
+
+    return Align(
+      alignment: Alignment.center,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 330),
+        margin: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.78),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: context.palette.outline),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  share.isReady ? Icons.cloud_done_rounded : Icons.cloud_upload_rounded,
+                  color: context.palette.accent,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(value: share.isReady ? null : progress, minHeight: 6),
+            ),
+            if (details.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(details, style: const TextStyle(color: DuetColors.textMuted, fontSize: 12)),
+            ],
+            const SizedBox(height: 6),
+            Text(
+              'Starts for both of you together when ready',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: context.palette.accent, fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 
 import '../domain/share_models.dart';
@@ -9,17 +12,22 @@ import 'chunked_reader.dart';
 import 'share_repository.dart';
 
 /// Uploads a file in parts straight to storage (S3) with signed URLs:
-///  * 3 parts in flight at once, ~30 MB of memory at most
+///  * several parts in flight at once (6 for small parts, 4 for 16 MB parts) — a
+///    single connection rarely uses what 4G/5G can upload, parallel ones do
+///  * every part carries its MD5 (Content-MD5); storage rejects a damaged part and
+///    it is sent again, so the partner never streams a corrupted file
 ///  * every part retried with backoff (flaky mobile networks), expired links re-signed
 ///  * parts that are already stored are skipped, so an interrupted upload resumes
 /// Pure Dart: used by the app and by the end-to-end test.
 class ShareUploader {
-  ShareUploader({required this.repository, Dio? http, this.concurrency = 3, this.maxAttempts = 6})
+  ShareUploader({required this.repository, Dio? http, this.concurrency, this.maxAttempts = 6})
       // A plain client: signed URLs must not get our Authorization header.
       : _http = http ?? Dio(BaseOptions(connectTimeout: const Duration(seconds: 20)));
 
   final ShareRepository repository;
-  final int concurrency;
+
+  /// Parallel uploads; null = pick from the part size.
+  final int? concurrency;
   final int maxAttempts;
   final Dio _http;
   final _cancelToken = CancelToken();
@@ -94,8 +102,9 @@ class ShareUploader {
       }
     }
 
+    final parallel = concurrency ?? (share.partSize <= 8 * 1024 * 1024 ? 6 : 4);
     try {
-      await Future.wait([for (var i = 0; i < concurrency; i++) worker()]);
+      await Future.wait([for (var i = 0; i < parallel; i++) worker()]);
     } finally {
       await reader.close();
     }
@@ -120,6 +129,10 @@ class ShareUploader {
   }
 
   Future<String> _uploadPart(ShareInfo share, int number, Uint8List bytes, void Function(int sent) onSent) async {
+    // MD5 off the UI thread (16 MB parts while a video plays).
+    final digest = await _md5InBackground(bytes);
+    final contentMd5 = base64.encode(digest);
+    final expectedEtag = digest.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     var attempt = 0;
     while (true) {
       if (_cancelled) throw const ShareCancelledException();
@@ -132,6 +145,7 @@ class ShareUploader {
             headers: {
               Headers.contentLengthHeader: bytes.length,
               Headers.contentTypeHeader: 'application/octet-stream',
+              'Content-MD5': contentMd5,
             },
             sendTimeout: const Duration(minutes: 5),
             receiveTimeout: const Duration(minutes: 2),
@@ -141,6 +155,14 @@ class ShareUploader {
         );
         final etag = response.headers.value('etag');
         if (etag == null || etag.isEmpty) throw StateError('Storage did not confirm part $number.');
+        // S3 / local storage answer with the MD5 of what they received (unless the
+        // bucket uses KMS encryption, where the ETag is opaque — then Content-MD5 alone guards it).
+        final received = etag.replaceAll('"', '').toLowerCase();
+        if (received.length == 32 && received != expectedEtag && attempt < maxAttempts - 1) {
+          attempt++;
+          onSent(0);
+          continue; // arrived different from what we sent: send it again
+        }
         return etag;
       } on DioException catch (error) {
         if (CancelToken.isCancel(error) || _cancelled) throw const ShareCancelledException();
@@ -153,3 +175,7 @@ class ShareUploader {
     }
   }
 }
+
+/// Top-level on purpose: the isolate closure must capture nothing but [bytes]
+/// (a closure inside the uploader would drag unsendable state along).
+Future<List<int>> _md5InBackground(Uint8List bytes) => Isolate.run(() => md5.convert(bytes).bytes);

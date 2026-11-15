@@ -138,7 +138,7 @@ abstract final class WatchFlow {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(entry.title, style: Theme.of(context).textTheme.titleLarge, maxLines: 2),
+              Text(prettyTitle(entry.title), style: Theme.of(context).textTheme.titleLarge, maxLines: 2, overflow: TextOverflow.ellipsis),
               const SizedBox(height: 6),
               Text(
                 'You stopped at ${formatPosition(entry.positionMs)}'

@@ -17,6 +17,7 @@ import 'package:duet/features/session/domain/room_state.dart';
 import 'package:duet/features/session/domain/sync_engine.dart';
 import 'package:duet/features/sharing/data/share_repository.dart';
 import 'package:duet/features/sharing/data/share_uploader.dart';
+import 'package:duet/features/sharing/data/stream_check.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_player.dart';
@@ -196,8 +197,15 @@ void main() {
         final bytes = List<int>.generate(23 * 1024 * 1024 + 77, (i) => (i * 7 + 3) % 256);
         await file.writeAsBytes(bytes);
         final fp = await fingerprintFile(file.path);
-        alex.client.loadMedia(kind: MediaKind.audio, title: 'Our Song', fingerprint: fp.fingerprint, sizeBytes: fp.sizeBytes);
+        alex.client.loadMedia(
+          kind: MediaKind.audio,
+          title: 'Our Song',
+          fingerprint: fp.fingerprint,
+          sizeBytes: fp.sizeBytes,
+          durationMs: 120000,
+        );
         await waitFor(() => sam.client.room?.media?.title == 'Our Song', 'song loaded');
+        alex.client.markReady(fingerprint: fp.fingerprint); // Alex has it open locally
 
         final asked = alex.client.events.firstWhere((e) => e is ShareRequested);
         sam.client.requestShare();
@@ -211,6 +219,9 @@ void main() {
           sizeBytes: fp.sizeBytes,
           fileName: 'Our Song.mp3',
         );
+        // ~8 parts of ≥5 MiB → uploaded over several parallel connections, each with Content-MD5.
+        expect(created.share.partCount, greaterThan(3));
+        await waitFor(() => sam.client.room?.startTogether == true, 'sharing waits to start together');
         var lastProgress = 0;
         await ShareUploader(repository: alexRepo).upload(
           share: created.share,
@@ -233,6 +244,22 @@ void main() {
         final ranged = await res.fold<List<int>>([], (all, chunk) => all..addAll(chunk));
         expect(res.statusCode, 206);
         expect(ranged, bytes.sublist(15 * 1024 * 1024, 15 * 1024 * 1024 + 10));
+
+        // Sam's phone checks the shared copy is intact before playing it…
+        expect(await verifySharedCopy(url: link.url, fingerprint: fp.fingerprint, sizeBytes: fp.sizeBytes), isTrue);
+        expect(await verifySharedCopy(url: link.url, fingerprint: 'ab' * 32, sizeBytes: fp.sizeBytes), isFalse);
+
+        // …opens it, and because both are now ready it starts for both after a countdown.
+        sam.client.markReady(fingerprint: fp.fingerprint, streaming: true);
+        await waitFor(() => alex.client.room?.playback.action == 'start_together', 'start together');
+        expect(alex.client.room!.playback.positionMs, 0);
+        await waitFor(
+          () => alex.player.isPlaying && sam.player.isPlaying,
+          'both playing after the countdown',
+          timeout: const Duration(seconds: 8),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 800));
+        expect((alex.player.positionMs - sam.player.positionMs).abs(), lessThan(150));
 
         // Ending the session deletes the upload.
         alex.client.clearMedia();

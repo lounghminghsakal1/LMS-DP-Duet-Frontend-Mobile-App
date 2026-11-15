@@ -2,9 +2,11 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:path/path.dart' as p;
 import 'package:photo_manager/photo_manager.dart';
 
+import '../../../core/utils/format.dart';
 import '../../history/data/history_store.dart';
 import '../../history/presentation/history_controller.dart';
 import '../../session/domain/room_state.dart';
@@ -205,9 +207,28 @@ class MediaLibrary {
     return scan(_filter(), 'Checking the rest of your library…');
   }
 
+  /// Reads a file's length with the player engine (for files picked without metadata).
+  Future<int?> probeDurationMs(String source) async {
+    final player = Player();
+    try {
+      await player.setVolume(0);
+      await player.open(Media(source), play: false);
+      final duration = player.state.duration > Duration.zero
+          ? player.state.duration
+          : await player.stream.duration
+              .firstWhere((d) => d > Duration.zero)
+              .timeout(const Duration(seconds: 6), onTimeout: () => Duration.zero);
+      return duration > Duration.zero ? duration.inMilliseconds : null;
+    } catch (_) {
+      return null;
+    } finally {
+      await player.dispose();
+    }
+  }
+
   static String _cleanTitle(String name) {
     final withoutExt = p.basenameWithoutExtension(name);
-    return withoutExt.isEmpty ? name : withoutExt;
+    return prettyTitle(withoutExt.isEmpty ? name : withoutExt);
   }
 }
 

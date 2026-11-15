@@ -12,7 +12,8 @@ class ChunkedReader {
 
   /// The next [size] bytes, fewer at the end of the stream, or null when nothing is left.
   Future<Uint8List?> next(int size) async {
-    final builder = BytesBuilder(copy: false);
+    // copy: true — some streams reuse their buffers; a part must never change after it's read.
+    final builder = BytesBuilder();
     while (builder.length < size) {
       final pending = _pending;
       if (pending == null) {

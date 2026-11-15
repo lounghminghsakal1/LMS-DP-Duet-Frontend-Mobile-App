@@ -37,6 +37,7 @@ class ShareUploadState {
     this.shareId,
     this.uploadedBytes = 0,
     this.sizeBytes = 0,
+    this.bytesPerSecond = 0,
     this.error,
   });
 
@@ -46,6 +47,9 @@ class ShareUploadState {
   final String? shareId;
   final int uploadedBytes;
   final int sizeBytes;
+
+  /// Smoothed upload speed.
+  final double bytesPerSecond;
   final String? error;
 
   bool get isBusy =>
@@ -54,11 +58,18 @@ class ShareUploadState {
       status == ShareUploadStatus.finishing;
   double get progress => sizeBytes <= 0 ? 0 : (uploadedBytes / sizeBytes).clamp(0, 1).toDouble();
 
+  /// Estimated time left, null until the speed is known.
+  Duration? get timeLeft {
+    if (bytesPerSecond <= 0 || status != ShareUploadStatus.uploading) return null;
+    return Duration(milliseconds: ((sizeBytes - uploadedBytes) / bytesPerSecond * 1000).round());
+  }
+
   ShareUploadState copyWith({
     ShareUploadStatus? status,
     String? shareId,
     int? uploadedBytes,
     int? sizeBytes,
+    double? bytesPerSecond,
     String? error,
   }) =>
       ShareUploadState(
@@ -68,6 +79,7 @@ class ShareUploadState {
         shareId: shareId ?? this.shareId,
         uploadedBytes: uploadedBytes ?? this.uploadedBytes,
         sizeBytes: sizeBytes ?? this.sizeBytes,
+        bytesPerSecond: bytesPerSecond ?? this.bytesPerSecond,
         error: error ?? this.error,
       );
 }
@@ -77,6 +89,8 @@ class ShareUploadState {
 class ShareController extends Notifier<ShareUploadState> {
   ShareUploader? _uploader;
   int _lastReportMs = 0;
+  int _speedSampleAt = 0;
+  int _speedSampleBytes = 0;
 
   @override
   ShareUploadState build() {
@@ -97,6 +111,8 @@ class ShareController extends Notifier<ShareUploadState> {
     final client = ref.read(sessionControllerProvider.notifier).client;
     if (media == null || media.kind == MediaKind.youtube || media.fingerprint == null || client == null) return;
 
+    _speedSampleAt = 0;
+    _speedSampleBytes = 0;
     state = ShareUploadState(
       status: ShareUploadStatus.preparing,
       title: media.title,
@@ -171,8 +187,19 @@ class ShareController extends Notifier<ShareUploadState> {
 
   void _onProgress(String shareId, int bytes) {
     if (!ref.mounted) return;
-    state = state.copyWith(uploadedBytes: bytes);
     final now = DateTime.now().millisecondsSinceEpoch;
+    // Speed: bytes over ~the last second, smoothed so the label doesn't jump around.
+    var speed = state.bytesPerSecond;
+    if (_speedSampleAt == 0) {
+      _speedSampleAt = now;
+      _speedSampleBytes = bytes;
+    } else if (now - _speedSampleAt >= 800) {
+      final instant = (bytes - _speedSampleBytes) * 1000 / (now - _speedSampleAt);
+      speed = speed <= 0 ? instant : speed * 0.6 + instant * 0.4;
+      _speedSampleAt = now;
+      _speedSampleBytes = bytes;
+    }
+    state = state.copyWith(uploadedBytes: bytes, bytesPerSecond: speed);
     if (now - _lastReportMs >= 1000) {
       _lastReportMs = now;
       ref.read(sessionControllerProvider.notifier).client?.reportShareProgress(shareId, bytes);

@@ -222,10 +222,14 @@ class RoomState {
     required this.serverTime,
     this.share,
     this.mode = AppMode.general,
+    this.startTogether = false,
   });
 
   /// The pair's shared theme.
   final AppMode mode;
+
+  /// A shared movie is waiting for both phones; it starts by itself when both are ready.
+  final bool startTogether;
 
   final String coupleId;
   final RoomMedia? media;
@@ -260,6 +264,7 @@ class RoomState {
         serverTime: serverTime,
         share: share,
         mode: mode,
+        startTogether: startTogether,
       );
 
   factory RoomState.fromJson(Map<String, dynamic> json) => RoomState(
@@ -267,6 +272,7 @@ class RoomState {
         media: json['media'] == null ? null : RoomMedia.fromJson(json['media'] as Map<String, dynamic>),
         share: RoomShare.fromJson(json['share']),
         mode: AppMode.parse(json['mode'] as String?),
+        startTogether: json['startTogether'] == true,
         playback: PlaybackState.fromJson(json['playback'] as Map<String, dynamic>),
         members: [
           for (final m in (json['members'] as List? ?? const [])) RoomMember.fromJson(m as Map<String, dynamic>),

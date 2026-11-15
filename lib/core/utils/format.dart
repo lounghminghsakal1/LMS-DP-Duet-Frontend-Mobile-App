@@ -52,3 +52,12 @@ String formatClock(DateTime time) {
   final suffix = local.hour < 12 ? 'AM' : 'PM';
   return '$hour:$minute $suffix';
 }
+
+/// Tidies a file name for display: "My_Song___Live(720p)_261105203112" → "My Song Live(720p)".
+/// Underscores become spaces and long timestamp numbers added by trimmer/recorder apps are dropped.
+String prettyTitle(String raw) {
+  var title = raw.replaceAll('_', ' ');
+  title = title.replaceAll(RegExp(r'(^|\s)\d{10,}(?=\s|$)'), ' ');
+  title = title.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
+  return title.isEmpty ? raw.trim() : title;
+}
