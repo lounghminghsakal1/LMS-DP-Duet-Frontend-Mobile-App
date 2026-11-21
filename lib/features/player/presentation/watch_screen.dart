@@ -666,6 +666,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
               AspectRatio(aspectRatio: 16 / 9, child: _buildVideoStage(snapshot, compact: true))
             else
               _buildAudioStage(snapshot),
+            _SharePanel(snapshot: snapshot, inline: true),
             _StatusStrip(snapshot: snapshot, engine: _engine, onNudge: () => _client?.nudge('come_watch')),
             ReactionBar(onReact: _react, dense: true),
             const Divider(height: 1),
@@ -761,7 +762,7 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
           if (_openError != null) _ErrorPane(message: _openError!),
           if (!_player.isReady && _openError == null) const Center(child: CircularProgressIndicator()),
           _WaitingOverlay(snapshot: snapshot, engine: _engine, onNudge: () => _client?.nudge('come_watch')),
-          _SharePanel(snapshot: snapshot),
+          if (!compact) _SharePanel(snapshot: snapshot),
           AnimatedOpacity(
             duration: const Duration(milliseconds: 200),
             opacity: _controlsVisible ? 1 : 0,
@@ -887,7 +888,6 @@ class _WatchScreenState extends ConsumerState<WatchScreen> with WidgetsBindingOb
               const Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()),
           ],
         ),
-        _SharePanel(snapshot: snapshot),
         _CountdownBadge(engine: _engine, serverNow: _session.serverNow),
         _BannerView(text: _banner),
       ],
@@ -1189,9 +1189,13 @@ class _CountdownBadgeState extends State<_CountdownBadge> {
 /// While a movie is being shared: upload progress for both of you, and the
 /// promise that it starts together once both phones are ready.
 class _SharePanel extends ConsumerWidget {
-  const _SharePanel({required this.snapshot});
+  const _SharePanel({required this.snapshot, this.inline = false});
 
   final SessionSnapshot snapshot;
+
+  /// Portrait: its own full-width card under the player (never covers the controls).
+  /// Fullscreen: a banner at the top of the video.
+  final bool inline;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1221,13 +1225,13 @@ class _SharePanel extends ConsumerWidget {
     ].join(' · ');
 
     return Align(
-      alignment: Alignment.center,
+      alignment: Alignment.topCenter,
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 330),
-        margin: const EdgeInsets.all(20),
+        constraints: BoxConstraints(maxWidth: inline ? double.infinity : 420),
+        margin: inline ? const EdgeInsets.fromLTRB(12, 10, 12, 2) : const EdgeInsets.fromLTRB(20, 52, 20, 0),
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.78),
+          color: inline ? context.palette.surfaceHigh : Colors.black.withValues(alpha: 0.78),
           borderRadius: BorderRadius.circular(18),
           border: Border.all(color: context.palette.outline),
         ),

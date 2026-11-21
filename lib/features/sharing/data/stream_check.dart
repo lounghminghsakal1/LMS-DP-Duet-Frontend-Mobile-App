@@ -14,7 +14,7 @@ Future<bool> verifySharedCopy({
   required int sizeBytes,
   Dio? http,
 }) async {
-  final dio = http ?? Dio(BaseOptions(connectTimeout: const Duration(seconds: 15), receiveTimeout: const Duration(minutes: 1)));
+  final dio = http ?? Dio(BaseOptions(connectTimeout: const Duration(seconds: 8), receiveTimeout: const Duration(seconds: 10)));
   final want = math.min(sizeBytes, kFingerprintHeadBytes);
   final response = await dio.get<List<int>>(
     url,

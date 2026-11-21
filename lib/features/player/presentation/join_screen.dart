@@ -188,9 +188,17 @@ class _JoinScreenState extends ConsumerState<JoinScreen> {
     setState(() => _stage = _Stage.checking);
     try {
       final link = await ref.read(shareRepositoryProvider).streamUrl(share.id);
-      final intact = await verifySharedCopy(url: link.url, fingerprint: media.fingerprint!, sizeBytes: share.sizeBytes);
+      // The check is a safety net, not a gate: if it can't finish quickly (slow or
+      // odd network), open the stream anyway; only a confirmed mismatch blocks.
+      bool? intact;
+      try {
+        intact = await verifySharedCopy(url: link.url, fingerprint: media.fingerprint!, sizeBytes: share.sizeBytes)
+            .timeout(const Duration(seconds: 12));
+      } catch (error) {
+        debugPrint('Shared copy check skipped: $error');
+      }
       if (!mounted) return;
-      if (!intact) {
+      if (intact == false) {
         setState(() => _stage = _Stage.corrupted);
         return;
       }
